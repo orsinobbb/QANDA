@@ -1,0 +1,142 @@
+{
+  "id": "self-judgement",
+  "title": "問答自我判斷示範卷",
+  "description": "涵蓋是非題、單選題、多選題、簡答題與複合式問題的示範問卷。",
+  "durationSeconds": 900,
+  "accessRoster": [
+    {
+      "personId": "A001",
+      "displayName": "測試作答者",
+      "serial": "STAR-2026",
+      "group": "demo"
+    },
+    {
+      "personId": "B002",
+      "displayName": "審核樣本",
+      "serial": "MOON-2026",
+      "group": "demo"
+    }
+  ],
+  "questions": [
+    {
+      "id": "q1",
+      "type": "boolean",
+      "title": "是非題",
+      "prompt": "JSON 問卷可以用同一套前端呈現不同題型。",
+      "correctAnswer": true,
+      "maxScore": 5
+    },
+    {
+      "id": "q2",
+      "type": "single",
+      "title": "單選題",
+      "prompt": "限時問卷啟動計時最適合放在哪個流程？",
+      "options": [
+        {
+          "value": "open",
+          "label": "打開網站時"
+        },
+        {
+          "value": "verified",
+          "label": "人員與序號驗證成功時"
+        },
+        {
+          "value": "submit",
+          "label": "送出答案時"
+        }
+      ],
+      "correctAnswer": "verified",
+      "maxScore": 10
+    },
+    {
+      "id": "q3",
+      "type": "multiple",
+      "title": "多選題",
+      "prompt": "哪些做法有助於答題記憶的可靠性？",
+      "options": [
+        {
+          "value": "local",
+          "label": "前端本機暫存"
+        },
+        {
+          "value": "server",
+          "label": "後端階段性同步"
+        },
+        {
+          "value": "overwrite",
+          "label": "每次開啟都覆蓋舊答案"
+        },
+        {
+          "value": "revision",
+          "label": "保留同步版本與時間"
+        }
+      ],
+      "correctAnswer": [
+        "local",
+        "server",
+        "revision"
+      ],
+      "maxScore": 15
+    },
+    {
+      "id": "q4",
+      "type": "short",
+      "title": "簡答題",
+      "prompt": "請用一到三句說明：為什麼問卷結果需要容易搜尋、分類與匯出？",
+      "gradingMode": "ai",
+      "rubric": "回答應提到後續分析、審核追蹤、跨批次比較或資料再利用，且語意清楚。",
+      "maxScore": 20
+    },
+    {
+      "id": "q5",
+      "type": "composite",
+      "title": "複合式問題",
+      "prompt": "請依據一個 AI 出卷與改卷流程回答下列子題。",
+      "questions": [
+        {
+          "id": "q5_a",
+          "type": "single",
+          "title": "子題 A",
+          "prompt": "AI 產生問卷後，系統最應先做什麼？",
+          "options": [
+            {
+              "value": "validate",
+              "label": "驗證 JSON 結構與題型"
+            },
+            {
+              "value": "publish",
+              "label": "直接發布"
+            },
+            {
+              "value": "delete",
+              "label": "刪除題目"
+            },
+            {
+              "value": "other",
+              "label": "其它",
+              "allowText": true,
+              "textPlaceholder": "自行填寫"
+            }
+          ],
+          "correctAnswer": "validate",
+          "maxScore": 10
+        },
+        {
+          "id": "q5_b",
+          "type": "short",
+          "title": "子題 B",
+          "prompt": "請寫出一項 AI 改卷過程需要留下的紀錄。",
+          "acceptedAnswers": [
+            "模型",
+            "prompt",
+            "評分理由",
+            "結果",
+            "時間"
+          ],
+          "matchMode": "contains",
+          "maxScore": 10
+        }
+      ]
+    }
+  ]
+}

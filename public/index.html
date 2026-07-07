@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>問答自我判斷</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">JSON Questionnaire System</p>
+        <h1>問答自我判斷</h1>
+      </div>
+      <nav class="view-switcher" aria-label="主要功能">
+        <button class="active" data-view="answer" type="button">作答</button>
+        <button data-view="admin" type="button">管理</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="answerView" class="view active">
+        <div class="answer-layout">
+          <aside class="access-panel">
+            <div class="panel-title">
+              <span>啟動作答</span>
+              <small id="healthStatus">檢查中</small>
+            </div>
+            <label>
+              問卷
+              <select id="questionnaireSelect"></select>
+            </label>
+            <label>
+              人員代號
+              <input id="personIdInput" value="A001" autocomplete="username" />
+            </label>
+            <label>
+              序號
+              <input id="serialInput" value="STAR-2026" autocomplete="one-time-code" />
+            </label>
+            <button id="startButton" class="primary" type="button">開始</button>
+            <div id="accessMessage" class="message"></div>
+          </aside>
+
+          <section class="workbench">
+            <div id="sessionBar" class="session-bar hidden">
+              <div>
+                <strong id="sessionTitle">尚未啟動</strong>
+                <span id="sessionMeta"></span>
+              </div>
+              <div class="timer" id="timerDisplay">--:--</div>
+            </div>
+
+            <div id="memoryBanner" class="memory-banner hidden">
+              <span>偵測到較新的本機暫存。</span>
+              <button id="restoreDraftButton" type="button">套用暫存</button>
+            </div>
+
+            <div id="emptyState" class="empty-state">
+              <p>選擇問卷並輸入可用的人員代號與序號後，系統會啟動倒數並載入問卷。</p>
+            </div>
+
+            <form id="questionForm" class="question-form hidden"></form>
+
+            <div id="answerActions" class="answer-actions hidden">
+              <div>
+                <span id="syncStatus">尚未同步</span>
+                <span id="progressStatus"></span>
+              </div>
+              <button id="syncButton" type="button">同步</button>
+              <button id="submitButton" class="primary" type="button">送出</button>
+            </div>
+
+            <section id="resultPanel" class="result-panel hidden"></section>
+          </section>
+        </div>
+      </section>
+
+      <section id="adminView" class="view">
+        <div class="admin-grid">
+          <section class="admin-panel json-panel">
+            <div class="panel-title">
+              <span>問卷 JSON</span>
+              <select id="adminQuestionnaireSelect"></select>
+            </div>
+            <textarea id="jsonEditor" spellcheck="false"></textarea>
+            <div class="admin-actions">
+              <button id="reloadJsonButton" type="button">重新載入</button>
+              <button id="saveJsonButton" class="primary" type="button">儲存問卷</button>
+            </div>
+            <div id="jsonMessage" class="message"></div>
+          </section>
+
+          <section class="admin-panel ai-panel">
+            <div class="panel-title">
+              <span>AI 出卷</span>
+              <small id="aiProviderLabel">fallback 可用</small>
+            </div>
+            <label>
+              問卷標題
+              <input id="aiTitleInput" value="AI 生成問卷" />
+            </label>
+            <label>
+              限制分鐘
+              <input id="aiDurationInput" type="number" min="1" max="240" value="15" />
+            </label>
+            <label>
+              出卷需求
+              <textarea id="aiPromptInput">設計一份評估使用者能否理解問答系統、資料記憶與 AI 改卷流程的問卷。</textarea>
+            </label>
+            <button id="generateButton" class="primary" type="button">產生草稿</button>
+            <div id="aiMessage" class="message"></div>
+          </section>
+
+          <section class="admin-panel results-panel">
+            <div class="panel-title">
+              <span>結果搜尋</span>
+              <button id="exportButton" type="button">匯出 CSV</button>
+            </div>
+            <div class="filters">
+              <select id="resultQuestionnaireFilter"></select>
+              <select id="resultStatusFilter">
+                <option value="">全部狀態</option>
+                <option value="in_progress">作答中</option>
+                <option value="submitted">已送出</option>
+                <option value="expired">已逾時</option>
+              </select>
+              <input id="resultKeywordInput" placeholder="搜尋人員、問卷或群組" />
+              <button id="searchResultsButton" type="button">搜尋</button>
+            </div>
+            <div class="result-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>人員</th>
+                    <th>問卷</th>
+                    <th>狀態</th>
+                    <th>分數</th>
+                    <th>時間</th>
+                  </tr>
+                </thead>
+                <tbody id="resultsBody"></tbody>
+              </table>
+            </div>
+            <div id="resultDetail" class="result-detail"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
+

@@ -1,0 +1,16 @@
+{
+  "name": "questionnaire-judgement-system",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "JSON-driven timed questionnaire system with staged memory, results, and AI-assisted authoring/grading hooks.",
+  "scripts": {
+    "build:pages": "node tools/build_pages.mjs",
+    "start": "node server.js",
+    "test": "node --test",
+    "utf8": "node tools/utf8_guard.js ."
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
