@@ -6,13 +6,20 @@ const state = {
   clientRevision: 0,
   syncTimer: null,
   tickTimer: null,
-  localDraft: null
+  localDraft: null,
+  activeQuestionId: null
 };
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 const elements = {
+  preflightStage: $("#preflightStage"),
+  activeStage: $("#activeStage"),
+  previewTitle: $("#previewTitle"),
+  previewDescription: $("#previewDescription"),
+  previewDuration: $("#previewDuration"),
+  previewQuestionCount: $("#previewQuestionCount"),
   healthStatus: $("#healthStatus"),
   questionnaireSelect: $("#questionnaireSelect"),
   adminQuestionnaireSelect: $("#adminQuestionnaireSelect"),
@@ -21,11 +28,18 @@ const elements = {
   serialInput: $("#serialInput"),
   startButton: $("#startButton"),
   accessMessage: $("#accessMessage"),
+  sidebarParticipant: $("#sidebarParticipant"),
+  sidebarParticipantId: $("#sidebarParticipantId"),
+  sidebarProgressText: $("#sidebarProgressText"),
+  progressFill: $("#progressFill"),
+  questionNav: $("#questionNav"),
+  sidebarSyncStatus: $("#sidebarSyncStatus"),
   sessionBar: $("#sessionBar"),
+  sessionStep: $("#sessionStep"),
   sessionTitle: $("#sessionTitle"),
   sessionMeta: $("#sessionMeta"),
+  timerLabel: $("#timerLabel"),
   timerDisplay: $("#timerDisplay"),
-  emptyState: $("#emptyState"),
   questionForm: $("#questionForm"),
   answerActions: $("#answerActions"),
   syncStatus: $("#syncStatus"),
@@ -35,6 +49,11 @@ const elements = {
   resultPanel: $("#resultPanel"),
   memoryBanner: $("#memoryBanner"),
   restoreDraftButton: $("#restoreDraftButton"),
+  submitDialog: $("#submitDialog"),
+  submitSummary: $("#submitSummary"),
+  submitReview: $("#submitReview"),
+  cancelSubmitButton: $("#cancelSubmitButton"),
+  confirmSubmitButton: $("#confirmSubmitButton"),
   jsonEditor: $("#jsonEditor"),
   jsonMessage: $("#jsonMessage"),
   reloadJsonButton: $("#reloadJsonButton"),
@@ -65,10 +84,14 @@ function bindEvents() {
   $$(".view-switcher button").forEach((button) => {
     button.addEventListener("click", () => showView(button.dataset.view));
   });
+  elements.questionnaireSelect.addEventListener("change", renderSurveyPreview);
   elements.startButton.addEventListener("click", startSession);
   elements.questionForm.addEventListener("input", handleAnswerInput);
+  elements.questionNav.addEventListener("click", handleQuestionNavigation);
   elements.syncButton.addEventListener("click", () => syncAnswers("manual"));
-  elements.submitButton.addEventListener("click", submitAnswers);
+  elements.submitButton.addEventListener("click", openSubmitReview);
+  elements.cancelSubmitButton.addEventListener("click", closeSubmitReview);
+  elements.confirmSubmitButton.addEventListener("click", submitAnswers);
   elements.restoreDraftButton.addEventListener("click", restoreLocalDraft);
   elements.adminQuestionnaireSelect.addEventListener("change", loadAdminSurvey);
   elements.reloadJsonButton.addEventListener("click", loadAdminSurvey);
@@ -100,14 +123,26 @@ async function loadQuestionnaires() {
   fillSelect(elements.questionnaireSelect, state.questionnaires);
   fillSelect(elements.adminQuestionnaireSelect, state.questionnaires);
   fillSelect(elements.resultQuestionnaireFilter, [{ id: "", title: "全部問卷" }, ...state.questionnaires]);
+  renderSurveyPreview();
 }
 
 function fillSelect(select, items) {
   select.innerHTML = items.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title)}</option>`).join("");
 }
 
+function renderSurveyPreview() {
+  const survey = state.questionnaires.find((item) => item.id === elements.questionnaireSelect.value);
+  if (!survey) return;
+  elements.previewTitle.textContent = survey.title;
+  elements.previewDescription.textContent = survey.description || "這份問卷將依序引導你完成作答，提交前可檢查所有答案。";
+  elements.previewDuration.textContent = `${Math.ceil(Number(survey.durationSeconds || 0) / 60)} 分鐘`;
+  elements.previewQuestionCount.textContent = `${Number(survey.questionCount || 0)} 題`;
+}
+
 async function startSession() {
   setMessage(elements.accessMessage, "驗證中");
+  elements.startButton.disabled = true;
+  elements.startButton.textContent = "正在驗證";
   try {
     const payload = {
       questionnaireId: elements.questionnaireSelect.value,
@@ -119,6 +154,9 @@ async function startSession() {
     setMessage(elements.accessMessage, data.event === "resumed" ? "已接續未完成作答。" : "問卷已啟動。", "success");
   } catch (error) {
     setMessage(elements.accessMessage, error.message, "error");
+  } finally {
+    elements.startButton.disabled = false;
+    elements.startButton.textContent = "驗證並開始作答";
   }
 }
 
@@ -127,37 +165,88 @@ function loadSessionData(data) {
   state.questionnaire = data.questionnaire;
   state.answers = { ...(data.session.answers || {}) };
   state.clientRevision = Number(data.session.memory?.clientRevision || 0);
-  elements.emptyState.classList.add("hidden");
-  elements.questionForm.classList.remove("hidden");
-  elements.answerActions.classList.remove("hidden");
+  elements.preflightStage.classList.add("hidden");
+  elements.activeStage.classList.remove("hidden");
   elements.sessionBar.classList.remove("hidden");
   elements.resultPanel.classList.toggle("hidden", !state.session.result);
-  renderSession();
   renderQuestions();
+  renderSession();
   inspectLocalDraft();
   startTimer();
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function renderSession() {
   elements.sessionTitle.textContent = state.questionnaire.title;
   const participant = state.session.participant;
   elements.sessionMeta.textContent = `${participant.displayName} · ${participant.personId} · ${statusLabel(state.session.status)}`;
-  elements.syncStatus.textContent = state.session.memory?.lastSyncAt
+  elements.sidebarParticipant.textContent = participant.displayName;
+  elements.sidebarParticipantId.textContent = `${participant.personId}${participant.group ? ` · ${participant.group}` : ""}`;
+  setSyncStatus(state.session.memory?.lastSyncAt
     ? `後端已同步 ${formatTime(state.session.memory.lastSyncAt)}`
-    : "尚未同步";
+    : "尚未同步");
   updateProgress();
   if (state.session.result) renderResult(state.session.result, state.session.aiLogs || []);
   const closed = state.session.status !== "in_progress";
+  const submitted = state.session.status === "submitted";
+  elements.sessionStep.textContent = submitted
+    ? "步驟 3 / 3 · 已完成"
+    : state.session.status === "expired"
+      ? "作答已結束"
+      : "步驟 2 / 3 · 作答中";
+  elements.timerLabel.textContent = closed ? "作答狀態" : "剩餘時間";
   elements.questionForm.toggleAttribute("inert", closed);
   elements.submitButton.disabled = closed;
   elements.syncButton.disabled = closed;
+  elements.questionForm.classList.toggle("hidden", submitted);
+  elements.answerActions.classList.toggle("hidden", submitted);
+  elements.activeStage.classList.toggle("completed", submitted);
   if (closed) stopTimer();
   renderTimerState();
 }
 
 function renderQuestions() {
   elements.questionForm.innerHTML = state.questionnaire.questions.map((question, index) => renderQuestion(question, `${index + 1}`, false)).join("");
+  renderQuestionNavigation();
   hydrateInputs();
+}
+
+function renderQuestionNavigation() {
+  const items = flattenQuestionMeta(state.questionnaire.questions);
+  state.activeQuestionId = state.activeQuestionId || items[0]?.id || null;
+  elements.questionNav.innerHTML = items
+    .map(
+      (item) => `
+        <button type="button" data-target="${escapeHtml(item.id)}" class="${item.id === state.activeQuestionId ? "active" : ""}">
+          <span class="nav-number">${escapeHtml(item.number)}</span>
+          <span class="nav-title">${escapeHtml(item.title)}</span>
+          <span class="nav-state" aria-hidden="true"></span>
+        </button>`
+    )
+    .join("");
+}
+
+function flattenQuestionMeta(questions, prefix = "") {
+  const items = [];
+  questions.forEach((question, index) => {
+    const number = prefix ? `${prefix}.${index + 1}` : `${index + 1}`;
+    if (question.type === "composite") {
+      items.push(...flattenQuestionMeta(question.questions || [], number));
+    } else {
+      items.push({ id: question.id, number, title: question.title || question.prompt });
+    }
+  });
+  return items;
+}
+
+function handleQuestionNavigation(event) {
+  const button = event.target.closest("button[data-target]");
+  if (!button) return;
+  const target = elements.questionForm.querySelector(`[data-question="${cssEscape(button.dataset.target)}"]`);
+  if (!target) return;
+  state.activeQuestionId = button.dataset.target;
+  elements.questionNav.querySelectorAll("button").forEach((item) => item.classList.toggle("active", item === button));
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderQuestion(question, number, nested) {
@@ -170,7 +259,10 @@ function renderQuestion(question, number, nested) {
   }[question.type] || question.type;
   const head = `
     <div class="question-head">
-      <small>${escapeHtml(number)} · ${escapeHtml(typeLabel)} · ${Number(question.maxScore || childMaxScore(question))} 分</small>
+      <div class="question-meta">
+        <small>${escapeHtml(number)} · ${escapeHtml(typeLabel)} · ${Number(question.maxScore || childMaxScore(question))} 分</small>
+        <span class="question-status" data-question-state="${escapeHtml(question.id)}">未作答</span>
+      </div>
       <h2>${escapeHtml(question.title || question.prompt)}</h2>
       <p>${escapeHtml(question.prompt)}</p>
     </div>`;
@@ -311,7 +403,7 @@ function inputValue(value) {
 }
 
 function scheduleSync() {
-  elements.syncStatus.textContent = "本機已記憶，等待同步";
+  setSyncStatus("本機已保存，等待同步");
   window.clearTimeout(state.syncTimer);
   state.syncTimer = window.setTimeout(() => syncAnswers("autosave"), 700);
 }
@@ -332,7 +424,7 @@ async function syncAnswers(phase = "autosave") {
     clearLocalDraft();
     renderSession();
   } catch (error) {
-    elements.syncStatus.textContent = error.message;
+    setSyncStatus(error.message);
     if (error.message.includes("結束") || error.message.includes("送出")) {
       state.session.status = "expired";
       renderSession();
@@ -340,12 +432,37 @@ async function syncAnswers(phase = "autosave") {
   }
 }
 
+function openSubmitReview() {
+  if (!state.session || state.session.status !== "in_progress") return;
+  const items = flattenQuestionMeta(state.questionnaire.questions);
+  const unanswered = items.filter((item) => !isAnswered(state.answers[item.id]));
+  const answeredCount = items.length - unanswered.length;
+  elements.submitSummary.textContent = unanswered.length
+    ? `已完成 ${answeredCount} 題，還有 ${unanswered.length} 題尚未作答。`
+    : `全部 ${items.length} 題都已完成，可以提交。`;
+  elements.submitReview.innerHTML = `
+    <div class="review-row">
+      <strong>已完成</strong>
+      <span>${answeredCount} / ${items.length} 題</span>
+    </div>
+    <div class="review-row ${unanswered.length ? "warning" : ""}">
+      <strong>尚未作答</strong>
+      <span>${unanswered.length ? unanswered.map((item) => item.number).join("、") : "無"}</span>
+    </div>`;
+  elements.confirmSubmitButton.textContent = unanswered.length ? "仍要確認送出" : "確認送出";
+  elements.submitDialog.showModal();
+}
+
+function closeSubmitReview() {
+  elements.submitDialog.close();
+}
+
 async function submitAnswers() {
   if (!state.session || state.session.status !== "in_progress") return;
-  const ok = window.confirm("送出後將停止作答並產生評分結果。");
-  if (!ok) return;
+  closeSubmitReview();
   elements.submitButton.disabled = true;
-  elements.syncStatus.textContent = "送出中";
+  elements.confirmSubmitButton.disabled = true;
+  setSyncStatus("正在完成提交");
   try {
     const data = await api(`/api/sessions/${state.session.id}/submit`, {
       method: "POST",
@@ -357,28 +474,49 @@ async function submitAnswers() {
     });
     loadSessionData(data);
     clearLocalDraft();
-    elements.syncStatus.textContent = "已送出";
+    setSyncStatus("已正式提交");
     await loadResults();
   } catch (error) {
-    elements.syncStatus.textContent = error.message;
+    setSyncStatus(error.message);
     elements.submitButton.disabled = false;
+  } finally {
+    elements.confirmSubmitButton.disabled = false;
   }
 }
 
 function renderResult(result, logs) {
   elements.resultPanel.classList.remove("hidden");
   const scoreText = `${result.score}/${result.maxScore}`;
+  const outcome = result.percentage >= 80
+    ? { title: "已達成本次標準", next: "你可以查看各題回饋，確認哪些判斷已掌握、哪些仍值得複習。" }
+    : result.percentage >= 60
+      ? { title: "已完成，建議補強", next: "部分題目仍有改善空間，建議先查看各題回饋，再安排補強。" }
+      : { title: "需要進一步補強", next: "建議依各題回饋重新確認關鍵內容，完成補強後再進行一次驗證。" };
+  const leafResults = flattenResultItems(result.questionResults);
+  const correctCount = leafResults.filter((item) => item.status === "correct").length;
   elements.resultPanel.innerHTML = `
     <div class="score-hero">
       <div class="score-ring" style="--score:${result.percentage}%"><span>${result.percentage}%</span></div>
       <div>
-        <h2>結果 ${escapeHtml(scoreText)}</h2>
-        <p>${escapeHtml(formatTime(result.gradedAt))} 完成評分。${logs.length ? `AI 紀錄 ${logs.length} 筆。` : ""}</p>
+        <div class="stage-label">步驟 3 / 3 · 已完成</div>
+        <h2 class="result-outcome">${escapeHtml(outcome.title)}</h2>
+        <p class="result-next-step">${escapeHtml(outcome.next)}</p>
+        <div class="result-metrics">
+          <div><span>總分</span><strong>${escapeHtml(scoreText)}</strong></div>
+          <div><span>掌握題目</span><strong>${correctCount} / ${leafResults.length}</strong></div>
+          <div><span>完成時間</span><strong>${escapeHtml(formatTime(result.gradedAt))}</strong></div>
+          ${logs.length ? `<div><span>AI 評分紀錄</span><strong>${logs.length} 筆</strong></div>` : ""}
+        </div>
       </div>
     </div>
+    <h3 class="result-section-title">各題結果與回饋</h3>
     <div class="result-list">
       ${result.questionResults.map(renderResultItem).join("")}
     </div>`;
+}
+
+function flattenResultItems(items) {
+  return items.flatMap((item) => item.children ? flattenResultItems(item.children) : [item]);
 }
 
 function renderResultItem(item) {
@@ -420,7 +558,7 @@ function tick() {
   if (remaining <= 0 && state.session.status === "in_progress") {
     state.session.status = "expired";
     renderSession();
-    elements.syncStatus.textContent = "時間已結束，停止作答";
+    setSyncStatus("時間已結束，答案已停止接受");
     stopTimer();
   }
 }
@@ -591,12 +729,36 @@ function exportResults() {
 
 function updateProgress() {
   if (!state.questionnaire) return;
-  const ids = leafQuestionIds(state.questionnaire.questions);
-  const answered = ids.filter((id) => {
-    const value = state.answers[id];
-    return isAnswered(value);
-  }).length;
-  elements.progressStatus.textContent = `完成 ${answered}/${ids.length}`;
+  const items = flattenQuestionMeta(state.questionnaire.questions);
+  const answered = items.filter((item) => isAnswered(state.answers[item.id])).length;
+  const remaining = items.length - answered;
+  const percentage = items.length ? Math.round((answered / items.length) * 100) : 0;
+  elements.progressStatus.textContent = remaining ? `尚有 ${remaining} 題未完成` : "全部題目已完成";
+  elements.sidebarProgressText.textContent = `${answered} / ${items.length}`;
+  elements.progressFill.style.width = `${percentage}%`;
+  elements.questionNav.querySelectorAll("button[data-target]").forEach((button) => {
+    button.classList.toggle("answered", isAnswered(state.answers[button.dataset.target]));
+  });
+  updateQuestionVisualStates(state.questionnaire.questions);
+}
+
+function updateQuestionVisualStates(questions) {
+  for (const question of questions) {
+    const answered = question.type === "composite"
+      ? (question.questions || []).every((child) => isQuestionAnswered(child))
+      : isAnswered(state.answers[question.id]);
+    const status = elements.questionForm.querySelector(`[data-question-state="${cssEscape(question.id)}"]`);
+    if (status) {
+      status.textContent = answered ? "已作答" : "未作答";
+      status.classList.toggle("answered", answered);
+    }
+    if (question.type === "composite") updateQuestionVisualStates(question.questions || []);
+  }
+}
+
+function isQuestionAnswered(question) {
+  if (question.type === "composite") return (question.questions || []).every(isQuestionAnswered);
+  return isAnswered(state.answers[question.id]);
 }
 
 function leafQuestionIds(questions) {
@@ -630,6 +792,11 @@ async function api(path, options = {}) {
 function setMessage(element, text, type = "") {
   element.textContent = text;
   element.className = `message ${type}`.trim();
+}
+
+function setSyncStatus(text) {
+  elements.syncStatus.textContent = text;
+  elements.sidebarSyncStatus.textContent = text;
 }
 
 function formatDuration(seconds) {

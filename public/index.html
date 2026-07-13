@@ -20,11 +20,50 @@
 
     <main>
       <section id="answerView" class="view active">
-        <div class="answer-layout">
-          <aside class="access-panel">
+        <div id="preflightStage" class="preflight-layout">
+          <section class="survey-intro" aria-labelledby="previewTitle">
+            <div class="stage-label">開始前</div>
+            <h2 id="previewTitle">準備載入問卷</h2>
+            <p id="previewDescription" class="survey-description">系統正在取得問卷資訊。</p>
+
+            <div class="survey-facts" aria-label="問卷資訊">
+              <div>
+                <span>作答時間</span>
+                <strong id="previewDuration">--</strong>
+              </div>
+              <div>
+                <span>題目數量</span>
+                <strong id="previewQuestionCount">--</strong>
+              </div>
+              <div>
+                <span>作答方式</span>
+                <strong>限時作答</strong>
+              </div>
+            </div>
+          </section>
+
+          <div class="experience-promises">
+            <div>
+              <strong>答案會自動保存</strong>
+              <span>輸入後先保存在本機，再同步至後端。</span>
+            </div>
+            <div>
+              <strong>驗證後才開始計時</strong>
+              <span>尚未通過身份驗證前，不會消耗作答時間。</span>
+            </div>
+            <div>
+              <strong>提交前可完整檢查</strong>
+              <span>系統會清楚列出尚未完成的題目。</span>
+            </div>
+          </div>
+
+          <aside id="accessPanel" class="access-panel">
             <div class="panel-title">
-              <span>啟動作答</span>
-              <small id="healthStatus">檢查中</small>
+              <div>
+                <small class="step-indicator">步驟 1 / 3</small>
+                <span>確認身份</span>
+              </div>
+              <small id="healthStatus" class="connection-status">檢查中</small>
             </div>
             <label>
               問卷
@@ -38,17 +77,49 @@
               序號
               <input id="serialInput" value="STAR-2026" autocomplete="one-time-code" />
             </label>
-            <button id="startButton" class="primary" type="button">開始</button>
-            <div id="accessMessage" class="message"></div>
+            <button id="startButton" class="primary start-button" type="button">驗證並開始作答</button>
+            <p class="start-note">驗證成功後將立即開始倒數。</p>
+            <div id="accessMessage" class="message" role="status" aria-live="polite"></div>
+          </aside>
+        </div>
+
+        <div id="activeStage" class="answer-layout hidden">
+          <aside class="answer-sidebar">
+            <div class="sidebar-person">
+              <small>目前作答者</small>
+              <strong id="sidebarParticipant">--</strong>
+              <span id="sidebarParticipantId">--</span>
+            </div>
+            <div class="sidebar-progress">
+              <div>
+                <span>作答進度</span>
+                <strong id="sidebarProgressText">0 / 0</strong>
+              </div>
+              <div class="progress-track" aria-hidden="true">
+                <span id="progressFill"></span>
+              </div>
+            </div>
+            <nav id="questionNav" class="question-nav" aria-label="題目導覽"></nav>
+            <div class="sidebar-save-state">
+              <span class="save-dot" aria-hidden="true"></span>
+              <div>
+                <strong>答案保存狀態</strong>
+                <span id="sidebarSyncStatus">尚未同步</span>
+              </div>
+            </div>
           </aside>
 
           <section class="workbench">
             <div id="sessionBar" class="session-bar hidden">
               <div>
+                <small id="sessionStep" class="step-indicator">步驟 2 / 3 · 作答中</small>
                 <strong id="sessionTitle">尚未啟動</strong>
                 <span id="sessionMeta"></span>
               </div>
-              <div class="timer" id="timerDisplay">--:--</div>
+              <div class="timer-group">
+                <span id="timerLabel">剩餘時間</span>
+                <div class="timer" id="timerDisplay" aria-live="polite">--:--</div>
+              </div>
             </div>
 
             <div id="memoryBanner" class="memory-banner hidden">
@@ -56,19 +127,17 @@
               <button id="restoreDraftButton" type="button">套用暫存</button>
             </div>
 
-            <div id="emptyState" class="empty-state">
-              <p>選擇問卷並輸入可用的人員代號與序號後，系統會啟動倒數並載入問卷。</p>
-            </div>
-
             <form id="questionForm" class="question-form hidden"></form>
 
             <div id="answerActions" class="answer-actions hidden">
-              <div>
-                <span id="syncStatus">尚未同步</span>
-                <span id="progressStatus"></span>
+              <div class="action-state">
+                <strong id="progressStatus"></strong>
+                <span id="syncStatus" role="status" aria-live="polite">尚未同步</span>
               </div>
-              <button id="syncButton" type="button">同步</button>
-              <button id="submitButton" class="primary" type="button">送出</button>
+              <div class="action-buttons">
+                <button id="syncButton" type="button">立即同步</button>
+                <button id="submitButton" class="primary" type="button">檢查並送出</button>
+              </div>
             </div>
 
             <section id="resultPanel" class="result-panel hidden"></section>
@@ -148,7 +217,20 @@
       </section>
     </main>
 
+    <dialog id="submitDialog" class="submit-dialog">
+      <div class="dialog-content">
+        <div class="stage-label">提交前檢查</div>
+        <h2>確認要結束作答嗎？</h2>
+        <p id="submitSummary">系統正在整理作答狀態。</p>
+        <div id="submitReview" class="submit-review"></div>
+        <p class="submit-warning">送出後答案將鎖定，剩餘時間也會立即停止。</p>
+        <div class="dialog-actions">
+          <button id="cancelSubmitButton" type="button">返回檢查</button>
+          <button id="confirmSubmitButton" class="primary" type="button">確認送出</button>
+        </div>
+      </div>
+    </dialog>
+
     <script type="module" src="/app.js"></script>
   </body>
 </html>
-
