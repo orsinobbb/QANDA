@@ -3,6 +3,23 @@
   "title": "問答自我判斷示範卷",
   "description": "涵蓋是非題、單選題、多選題、簡答題與複合式問題的示範問卷。",
   "durationSeconds": 900,
+  "lifecycle": {
+    "status": "archived",
+    "version": 1,
+    "owner": "system-demo",
+    "createdAt": "2026-07-01T00:00:00.000Z",
+    "updatedAt": "2026-07-14T04:00:00.000Z",
+    "archivedAt": "2026-07-14T04:00:00.000Z",
+    "audit": [
+      {
+        "from": "closed",
+        "to": "archived",
+        "at": "2026-07-14T04:00:00.000Z",
+        "actor": "course-team",
+        "note": "由三份正式課程評量取代"
+      }
+    ]
+  },
   "accessRoster": [
     {
       "personId": "A001",

@@ -7,9 +7,11 @@ import {
   createSession,
   gradeAnswers,
   isExpired,
+  isSurveyPublished,
   mergeAnswers,
   publicSurvey,
   remainingSeconds,
+  transitionSurveyLifecycle,
   validateSurvey
 } from "./src/surveyEngine.js";
 import {
@@ -19,6 +21,7 @@ import {
   listQuestionnaires,
   listSessions,
   saveQuestionnaire,
+  saveQuestionnaireLifecycle,
   saveSession
 } from "./src/storage.js";
 import { generateQuestionnaireDraft, gradeAiQuestions, previewGrade } from "./src/aiService.js";
@@ -60,14 +63,16 @@ async function handleApi(req, res, url) {
 
   if (method === "GET" && url.pathname === "/api/questionnaires") {
     const surveys = await listQuestionnaires();
+    const visibleSurveys = url.searchParams.get("scope") === "admin" ? surveys : surveys.filter(isSurveyPublished);
     sendJson(res, 200, {
-      questionnaires: surveys.map((survey) => ({
+      questionnaires: visibleSurveys.map((survey) => ({
         id: survey.id,
         title: survey.title,
         description: survey.description || "",
         durationSeconds: survey.durationSeconds,
         questionCount: countQuestions(survey.questions),
-        rosterCount: Array.isArray(survey.accessRoster) ? survey.accessRoster.length : 0
+        rosterCount: Array.isArray(survey.accessRoster) ? survey.accessRoster.length : 0,
+        lifecycle: survey.lifecycle || { status: "published", version: 1 }
       }))
     });
     return;
@@ -87,9 +92,22 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (method === "PATCH" && segments[1] === "questionnaires" && segments[2] && segments[3] === "lifecycle") {
+    const body = await readBody(req);
+    const survey = await requireSurvey(segments[2]);
+    const transitioned = transitionSurveyLifecycle(survey, body.status, {
+      actor: body.actor || "questionnaire-admin",
+      note: body.note || ""
+    });
+    await saveQuestionnaireLifecycle(transitioned);
+    sendJson(res, 200, { questionnaire: transitioned });
+    return;
+  }
+
   if (method === "POST" && url.pathname === "/api/sessions/start") {
     const body = await readBody(req);
     const survey = await requireSurvey(body.questionnaireId);
+    if (!isSurveyPublished(survey)) throw httpError(409, "此問卷目前未開放作答。");
     const participant = resolveParticipant(survey, body);
     const existing = await findReusableSession(survey.id, participant.personId);
     if (existing) {
@@ -379,7 +397,10 @@ function csvCell(value) {
 }
 
 function countQuestions(questions = []) {
-  return questions.reduce((count, question) => count + 1 + (question.type === "composite" ? countQuestions(question.questions) : 0), 0);
+  return questions.reduce(
+    (count, question) => count + (question.type === "composite" ? countQuestions(question.questions) : 1),
+    0
+  );
 }
 
 function contentType(file) {
@@ -421,4 +442,3 @@ function httpError(statusCode, message, details) {
   error.details = details;
   return error;
 }
-

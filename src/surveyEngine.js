@@ -1,4 +1,12 @@
 const QUESTION_TYPES = new Set(["boolean", "single", "multiple", "short", "composite"]);
+const LIFECYCLE_STATUSES = new Set(["draft", "review", "published", "closed", "archived"]);
+const LIFECYCLE_TRANSITIONS = {
+  draft: ["review"],
+  review: ["draft", "published"],
+  published: ["closed"],
+  closed: ["published", "archived"],
+  archived: ["closed"]
+};
 
 export function nowIso() {
   return new Date().toISOString();
@@ -21,6 +29,9 @@ export function validateSurvey(survey) {
     errors.push("questions must be a non-empty array");
   } else {
     validateQuestions(survey.questions, errors, new Set());
+  }
+  if (survey?.lifecycle?.status && !LIFECYCLE_STATUSES.has(survey.lifecycle.status)) {
+    errors.push("lifecycle.status must be draft, review, published, closed, or archived");
   }
   return errors;
 }
@@ -57,8 +68,95 @@ function stripAnswerKeys(questions) {
     delete question.correctAnswer;
     delete question.acceptedAnswers;
     delete question.matchMode;
+    delete question.rubric;
     if (question.type === "composite") stripAnswerKeys(question.questions);
   }
+}
+
+export function surveyLifecycleStatus(survey) {
+  return survey?.lifecycle?.status || "published";
+}
+
+export function isSurveyPublished(survey) {
+  return surveyLifecycleStatus(survey) === "published";
+}
+
+export function prepareSurveyForSave(survey, existing = null, options = {}) {
+  if (!survey || typeof survey !== "object") {
+    const error = new Error("問卷內容必須是 JSON 物件。");
+    error.statusCode = 422;
+    throw error;
+  }
+  const at = options.at || nowIso();
+  const actor = options.actor || "questionnaire-admin";
+  const next = structuredClone(survey);
+  const existingStatus = existing ? surveyLifecycleStatus(existing) : null;
+  const requestedStatus = surveyLifecycleStatus(next);
+  if (existing && requestedStatus !== existingStatus) {
+    const error = new Error("請使用生命週期操作變更問卷狀態。");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const previousLifecycle = existing?.lifecycle || {};
+  const lifecycle = next.lifecycle || {};
+  next.lifecycle = {
+    ...lifecycle,
+    status: existingStatus || lifecycle.status || "draft",
+    version: existing ? Number(previousLifecycle.version || 1) + 1 : Number(lifecycle.version || 1),
+    owner: lifecycle.owner || previousLifecycle.owner || actor,
+    createdAt: lifecycle.createdAt || previousLifecycle.createdAt || at,
+    updatedAt: at,
+    audit: Array.isArray(previousLifecycle.audit)
+      ? [...previousLifecycle.audit]
+      : Array.isArray(lifecycle.audit)
+        ? [...lifecycle.audit]
+        : []
+  };
+  next.lifecycle.audit.push({
+    from: next.lifecycle.status,
+    to: next.lifecycle.status,
+    at,
+    actor,
+    note: existing ? `儲存第 ${next.lifecycle.version} 版內容` : "建立問卷草稿"
+  });
+  return next;
+}
+
+export function transitionSurveyLifecycle(survey, nextStatus, options = {}) {
+  const currentStatus = surveyLifecycleStatus(survey);
+  if (!LIFECYCLE_STATUSES.has(nextStatus)) {
+    const error = new Error("不支援的問卷生命週期狀態。");
+    error.statusCode = 422;
+    throw error;
+  }
+  if (!(LIFECYCLE_TRANSITIONS[currentStatus] || []).includes(nextStatus)) {
+    const error = new Error(`問卷無法由 ${currentStatus} 直接變更為 ${nextStatus}。`);
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const at = options.at || nowIso();
+  const updated = structuredClone(survey);
+  const lifecycle = updated.lifecycle || {};
+  lifecycle.status = nextStatus;
+  lifecycle.version = Number(lifecycle.version || 1);
+  lifecycle.createdAt = lifecycle.createdAt || at;
+  lifecycle.updatedAt = at;
+  lifecycle.audit = Array.isArray(lifecycle.audit) ? lifecycle.audit : [];
+  lifecycle.audit.push({
+    from: currentStatus,
+    to: nextStatus,
+    at,
+    actor: options.actor || "questionnaire-admin",
+    note: options.note || ""
+  });
+  if (nextStatus === "review") lifecycle.submittedForReviewAt = at;
+  if (nextStatus === "published") lifecycle.publishedAt = at;
+  if (nextStatus === "closed") lifecycle.closedAt = at;
+  if (nextStatus === "archived") lifecycle.archivedAt = at;
+  updated.lifecycle = lifecycle;
+  return updated;
 }
 
 export function flattenQuestions(questions) {
@@ -135,10 +233,13 @@ export function gradeAnswers(survey, answers, aiAssessments = {}) {
     score += result.score;
     maxScore += result.maxScore;
   }
+  const percentage = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
   return {
     score,
     maxScore,
-    percentage: maxScore > 0 ? Math.round((score / maxScore) * 100) : 0,
+    percentage,
+    proficiency: resolveProficiency(survey, percentage),
+    competencies: aggregateCompetencies(survey, questionResults),
     gradedAt: nowIso(),
     questionResults
   };
@@ -153,6 +254,7 @@ function gradeQuestion(question, answers, aiAssessments) {
       id: question.id,
       title: question.title || question.prompt,
       type: question.type,
+      competency: question.competency || null,
       score,
       maxScore,
       status: children.every((child) => child.status === "correct") ? "correct" : "partial",
@@ -170,6 +272,7 @@ function gradeQuestion(question, answers, aiAssessments) {
       id: question.id,
       title: question.title || question.prompt,
       type: question.type,
+      competency: question.competency || null,
       score: aiScore,
       maxScore,
       status: aiScore >= maxScore ? "correct" : aiScore > 0 ? "partial" : "incorrect",
@@ -183,11 +286,49 @@ function gradeQuestion(question, answers, aiAssessments) {
     id: question.id,
     title: question.title || question.prompt,
     type: question.type,
+    competency: question.competency || null,
     score: fixed.score,
     maxScore,
     status: fixed.status,
     comment: fixed.comment
   };
+}
+
+function resolveProficiency(survey, percentage) {
+  const rules = Array.isArray(survey.proficiencyRules) ? [...survey.proficiencyRules] : [];
+  const matched = rules
+    .sort((a, b) => Number(b.minPercentage || 0) - Number(a.minPercentage || 0))
+    .find((rule) => percentage >= Number(rule.minPercentage || 0));
+  if (matched) return structuredClone(matched);
+  const passPercentage = Number(survey.passPercentage || 70);
+  return percentage >= passPercentage
+    ? { minPercentage: passPercentage, label: "已達標", recommendation: "可進入下一階段。" }
+    : { minPercentage: 0, label: "尚未達標", recommendation: "請依各題回饋安排補強。" };
+}
+
+function aggregateCompetencies(survey, questionResults) {
+  const definitions = new Map((survey.competencies || []).map((item) => [item.id, item.label]));
+  const totals = new Map();
+  for (const item of flattenResultItems(questionResults)) {
+    if (!item.competency) continue;
+    const total = totals.get(item.competency) || {
+      id: item.competency,
+      label: definitions.get(item.competency) || item.competency,
+      score: 0,
+      maxScore: 0
+    };
+    total.score += Number(item.score || 0);
+    total.maxScore += Number(item.maxScore || 0);
+    totals.set(item.competency, total);
+  }
+  return [...totals.values()].map((item) => ({
+    ...item,
+    percentage: item.maxScore > 0 ? Math.round((item.score / item.maxScore) * 100) : 0
+  }));
+}
+
+function flattenResultItems(items) {
+  return items.flatMap((item) => (item.children ? flattenResultItems(item.children) : [item]));
 }
 
 function gradeFixed(question, value, maxScore) {

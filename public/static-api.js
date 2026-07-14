@@ -35,14 +35,16 @@
 
     if (method === "GET" && apiPath === "/api/questionnaires") {
       const surveys = await listSurveys();
+      const visibleSurveys = url.searchParams.get("scope") === "admin" ? surveys : surveys.filter(isSurveyPublished);
       return {
-        questionnaires: surveys.map((survey) => ({
+        questionnaires: visibleSurveys.map((survey) => ({
           id: survey.id,
           title: survey.title,
           description: survey.description || "",
           durationSeconds: survey.durationSeconds,
           questionCount: countQuestions(survey.questions),
-          rosterCount: Array.isArray(survey.accessRoster) ? survey.accessRoster.length : 0
+          rosterCount: Array.isArray(survey.accessRoster) ? survey.accessRoster.length : 0,
+          lifecycle: survey.lifecycle || { status: "published", version: 1 }
         }))
       };
     }
@@ -53,12 +55,22 @@
 
     if (method === "POST" && apiPath === "/api/questionnaires") {
       const survey = body.questionnaire || body;
-      saveSurvey(survey);
-      return { questionnaire: survey };
+      const existing = (await listSurveys()).find((item) => item.id === survey.id) || null;
+      const prepared = prepareSurveyForSave(survey, existing);
+      saveSurvey(prepared);
+      return { questionnaire: prepared };
+    }
+
+    if (method === "PATCH" && segments[1] === "questionnaires" && segments[2] && segments[3] === "lifecycle") {
+      const survey = await requireSurvey(segments[2]);
+      const transitioned = transitionSurveyLifecycle(survey, body.status, body);
+      saveSurvey(transitioned);
+      return { questionnaire: transitioned };
     }
 
     if (method === "POST" && apiPath === "/api/sessions/start") {
       const survey = await requireSurvey(body.questionnaireId);
+      if (!isSurveyPublished(survey)) throw httpError(409, "此問卷目前未開放作答。");
       const participant = resolveParticipant(survey, body);
       const existing = getSessions().find(
         (session) =>
@@ -161,6 +173,81 @@
     staticState.surveys = null;
   }
 
+  function surveyLifecycleStatus(survey) {
+    return survey?.lifecycle?.status || "published";
+  }
+
+  function isSurveyPublished(survey) {
+    return surveyLifecycleStatus(survey) === "published";
+  }
+
+  function prepareSurveyForSave(survey, existing) {
+    if (!survey || typeof survey !== "object") throw httpError(422, "問卷內容必須是 JSON 物件。");
+    const at = new Date().toISOString();
+    const next = structuredClone(survey);
+    const existingStatus = existing ? surveyLifecycleStatus(existing) : null;
+    const requestedStatus = surveyLifecycleStatus(next);
+    if (existing && requestedStatus !== existingStatus) throw httpError(409, "請使用生命週期操作變更問卷狀態。");
+    const previous = existing?.lifecycle || {};
+    const lifecycle = next.lifecycle || {};
+    next.lifecycle = {
+      ...lifecycle,
+      status: existingStatus || lifecycle.status || "draft",
+      version: existing ? Number(previous.version || 1) + 1 : Number(lifecycle.version || 1),
+      owner: lifecycle.owner || previous.owner || "questionnaire-admin",
+      createdAt: lifecycle.createdAt || previous.createdAt || at,
+      updatedAt: at,
+      audit: Array.isArray(previous.audit)
+        ? [...previous.audit]
+        : Array.isArray(lifecycle.audit)
+          ? [...lifecycle.audit]
+          : []
+    };
+    next.lifecycle.audit.push({
+      from: next.lifecycle.status,
+      to: next.lifecycle.status,
+      at,
+      actor: "questionnaire-admin",
+      note: existing ? `儲存第 ${next.lifecycle.version} 版內容` : "建立問卷草稿"
+    });
+    return next;
+  }
+
+  function transitionSurveyLifecycle(survey, nextStatus, options = {}) {
+    const transitions = {
+      draft: ["review"],
+      review: ["draft", "published"],
+      published: ["closed"],
+      closed: ["published", "archived"],
+      archived: ["closed"]
+    };
+    const currentStatus = surveyLifecycleStatus(survey);
+    if (!(transitions[currentStatus] || []).includes(nextStatus)) {
+      throw httpError(409, `問卷無法由 ${currentStatus} 直接變更為 ${nextStatus}。`);
+    }
+    const at = new Date().toISOString();
+    const updated = structuredClone(survey);
+    const lifecycle = updated.lifecycle || {};
+    lifecycle.status = nextStatus;
+    lifecycle.version = Number(lifecycle.version || 1);
+    lifecycle.createdAt = lifecycle.createdAt || at;
+    lifecycle.updatedAt = at;
+    lifecycle.audit = Array.isArray(lifecycle.audit) ? lifecycle.audit : [];
+    lifecycle.audit.push({
+      from: currentStatus,
+      to: nextStatus,
+      at,
+      actor: options.actor || "questionnaire-admin",
+      note: options.note || ""
+    });
+    if (nextStatus === "review") lifecycle.submittedForReviewAt = at;
+    if (nextStatus === "published") lifecycle.publishedAt = at;
+    if (nextStatus === "closed") lifecycle.closedAt = at;
+    if (nextStatus === "archived") lifecycle.archivedAt = at;
+    updated.lifecycle = lifecycle;
+    return updated;
+  }
+
   function resolveParticipant(survey, body) {
     const roster = Array.isArray(survey.accessRoster) ? survey.accessRoster : [];
     if (!body.personId) throw httpError(400, "personId is required");
@@ -215,6 +302,7 @@
       delete question.correctAnswer;
       delete question.acceptedAnswers;
       delete question.matchMode;
+      delete question.rubric;
       if (question.type === "composite") stripAnswerKeys(question.questions || []);
     }
   }
@@ -283,10 +371,13 @@
       score += result.score;
       maxScore += result.maxScore;
     }
+    const percentage = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
     return {
       score,
       maxScore,
-      percentage: maxScore > 0 ? Math.round((score / maxScore) * 100) : 0,
+      percentage,
+      proficiency: resolveProficiency(survey, percentage),
+      competencies: aggregateCompetencies(survey, questionResults),
       gradedAt: new Date().toISOString(),
       questionResults
     };
@@ -301,6 +392,7 @@
         id: question.id,
         title: question.title || question.prompt,
         type: question.type,
+        competency: question.competency || null,
         score,
         maxScore,
         status: children.every((child) => child.status === "correct") ? "correct" : "partial",
@@ -317,6 +409,7 @@
         id: question.id,
         title: question.title || question.prompt,
         type: question.type,
+        competency: question.competency || null,
         score: aiScore,
         maxScore,
         status: aiScore >= maxScore ? "correct" : aiScore > 0 ? "partial" : "incorrect",
@@ -329,11 +422,49 @@
       id: question.id,
       title: question.title || question.prompt,
       type: question.type,
+      competency: question.competency || null,
       score: fixed.score,
       maxScore,
       status: fixed.status,
       comment: fixed.comment
     };
+  }
+
+  function resolveProficiency(survey, percentage) {
+    const rules = Array.isArray(survey.proficiencyRules) ? [...survey.proficiencyRules] : [];
+    const matched = rules
+      .sort((a, b) => Number(b.minPercentage || 0) - Number(a.minPercentage || 0))
+      .find((rule) => percentage >= Number(rule.minPercentage || 0));
+    if (matched) return structuredClone(matched);
+    const passPercentage = Number(survey.passPercentage || 70);
+    return percentage >= passPercentage
+      ? { minPercentage: passPercentage, label: "已達標", recommendation: "可進入下一階段。" }
+      : { minPercentage: 0, label: "尚未達標", recommendation: "請依各題回饋安排補強。" };
+  }
+
+  function aggregateCompetencies(survey, questionResults) {
+    const definitions = new Map((survey.competencies || []).map((item) => [item.id, item.label]));
+    const totals = new Map();
+    for (const item of flattenResultItems(questionResults)) {
+      if (!item.competency) continue;
+      const total = totals.get(item.competency) || {
+        id: item.competency,
+        label: definitions.get(item.competency) || item.competency,
+        score: 0,
+        maxScore: 0
+      };
+      total.score += Number(item.score || 0);
+      total.maxScore += Number(item.maxScore || 0);
+      totals.set(item.competency, total);
+    }
+    return [...totals.values()].map((item) => ({
+      ...item,
+      percentage: item.maxScore > 0 ? Math.round((item.score / item.maxScore) * 100) : 0
+    }));
+  }
+
+  function flattenResultItems(items) {
+    return items.flatMap((item) => (item.children ? flattenResultItems(item.children) : [item]));
   }
 
   function gradeFixed(question, value, maxScore) {
@@ -445,6 +576,13 @@
       title,
       description: `靜態版依「${body.prompt || "未提供主題"}」建立的草稿。`,
       durationSeconds: Number(body.durationMinutes || 15) * 60,
+      lifecycle: {
+        status: "draft",
+        version: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        audit: []
+      },
       accessRoster: [{ personId: "A001", displayName: "測試作答者", serial: "STAR-2026", group: "static" }],
       questions: [
         { id: "q1", type: "boolean", title: "核心判斷", prompt: "作答者能清楚辨識此主題的主要目標。", correctAnswer: true, maxScore: 5 },
@@ -479,7 +617,10 @@
   }
 
   function countQuestions(questions = []) {
-    return questions.reduce((sum, question) => sum + 1 + (question.type === "composite" ? countQuestions(question.questions || []) : 0), 0);
+    return questions.reduce(
+      (sum, question) => sum + (question.type === "composite" ? countQuestions(question.questions || []) : 1),
+      0
+    );
   }
 
   function mergeById(items) {
@@ -527,4 +668,3 @@
     );
   }
 })();
-

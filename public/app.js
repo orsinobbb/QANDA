@@ -1,5 +1,7 @@
 const state = {
   questionnaires: [],
+  adminQuestionnaires: [],
+  adminSurvey: null,
   questionnaire: null,
   session: null,
   answers: {},
@@ -20,6 +22,7 @@ const elements = {
   previewDescription: $("#previewDescription"),
   previewDuration: $("#previewDuration"),
   previewQuestionCount: $("#previewQuestionCount"),
+  directLinkHint: $("#directLinkHint"),
   healthStatus: $("#healthStatus"),
   questionnaireSelect: $("#questionnaireSelect"),
   adminQuestionnaireSelect: $("#adminQuestionnaireSelect"),
@@ -58,6 +61,16 @@ const elements = {
   jsonMessage: $("#jsonMessage"),
   reloadJsonButton: $("#reloadJsonButton"),
   saveJsonButton: $("#saveJsonButton"),
+  lifecycleTitle: $("#lifecycleTitle"),
+  lifecycleStatus: $("#lifecycleStatus"),
+  lifecycleVersion: $("#lifecycleVersion"),
+  lifecycleTrail: $("#lifecycleTrail"),
+  lifecycleMeta: $("#lifecycleMeta"),
+  lifecycleActions: $("#lifecycleActions"),
+  lifecycleMessage: $("#lifecycleMessage"),
+  shareLinkInput: $("#shareLinkInput"),
+  copyShareLinkButton: $("#copyShareLinkButton"),
+  openShareLinkButton: $("#openShareLinkButton"),
   aiTitleInput: $("#aiTitleInput"),
   aiDurationInput: $("#aiDurationInput"),
   aiPromptInput: $("#aiPromptInput"),
@@ -84,7 +97,7 @@ function bindEvents() {
   $$(".view-switcher button").forEach((button) => {
     button.addEventListener("click", () => showView(button.dataset.view));
   });
-  elements.questionnaireSelect.addEventListener("change", renderSurveyPreview);
+  elements.questionnaireSelect.addEventListener("change", handleSurveySelection);
   elements.startButton.addEventListener("click", startSession);
   elements.questionForm.addEventListener("input", handleAnswerInput);
   elements.questionNav.addEventListener("click", handleQuestionNavigation);
@@ -96,6 +109,9 @@ function bindEvents() {
   elements.adminQuestionnaireSelect.addEventListener("change", loadAdminSurvey);
   elements.reloadJsonButton.addEventListener("click", loadAdminSurvey);
   elements.saveJsonButton.addEventListener("click", saveAdminSurvey);
+  elements.lifecycleActions.addEventListener("click", handleLifecycleAction);
+  elements.copyShareLinkButton.addEventListener("click", copyShareLink);
+  elements.openShareLinkButton.addEventListener("click", openShareLink);
   elements.generateButton.addEventListener("click", generateQuestionnaire);
   elements.searchResultsButton.addEventListener("click", loadResults);
   elements.exportButton.addEventListener("click", exportResults);
@@ -117,17 +133,43 @@ async function checkHealth() {
   }
 }
 
-async function loadQuestionnaires() {
-  const data = await api("/api/questionnaires");
-  state.questionnaires = data.questionnaires || [];
+async function loadQuestionnaires(preferredAdminId = "") {
+  const previousSurveyId = elements.questionnaireSelect.value;
+  const previousAdminId = preferredAdminId || elements.adminQuestionnaireSelect.value;
+  const [publicData, adminData] = await Promise.all([
+    api("/api/questionnaires"),
+    api("/api/questionnaires?scope=admin")
+  ]);
+  state.questionnaires = publicData.questionnaires || [];
+  state.adminQuestionnaires = adminData.questionnaires || [];
   fillSelect(elements.questionnaireSelect, state.questionnaires);
-  fillSelect(elements.adminQuestionnaireSelect, state.questionnaires);
-  fillSelect(elements.resultQuestionnaireFilter, [{ id: "", title: "全部問卷" }, ...state.questionnaires]);
+  fillSelect(elements.adminQuestionnaireSelect, state.adminQuestionnaires, true);
+  fillSelect(elements.resultQuestionnaireFilter, [{ id: "", title: "全部問卷" }, ...state.adminQuestionnaires]);
+
+  const directSurveyId = new URLSearchParams(window.location.search).get("survey");
+  const selectedSurveyId = [directSurveyId, previousSurveyId, state.questionnaires[0]?.id]
+    .find((id) => id && state.questionnaires.some((item) => item.id === id));
+  if (selectedSurveyId) elements.questionnaireSelect.value = selectedSurveyId;
+  const selectedAdminId = [previousAdminId, directSurveyId, state.adminQuestionnaires[0]?.id]
+    .find((id) => id && state.adminQuestionnaires.some((item) => item.id === id));
+  if (selectedAdminId) elements.adminQuestionnaireSelect.value = selectedAdminId;
+  elements.directLinkHint.classList.toggle("hidden", !directSurveyId || directSurveyId !== selectedSurveyId);
   renderSurveyPreview();
 }
 
-function fillSelect(select, items) {
-  select.innerHTML = items.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title)}</option>`).join("");
+function fillSelect(select, items, includeLifecycle = false) {
+  select.innerHTML = items.map((item) => {
+    const suffix = includeLifecycle ? ` · ${lifecycleLabel(item.lifecycle?.status || "published")}` : "";
+    return `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title + suffix)}</option>`;
+  }).join("");
+}
+
+function handleSurveySelection() {
+  const params = new URLSearchParams(window.location.search);
+  params.set("survey", elements.questionnaireSelect.value);
+  window.history.replaceState({}, "", `${window.location.pathname}?${params}${window.location.hash}`);
+  elements.directLinkHint.classList.remove("hidden");
+  renderSurveyPreview();
 }
 
 function renderSurveyPreview() {
@@ -487,13 +529,29 @@ async function submitAnswers() {
 function renderResult(result, logs) {
   elements.resultPanel.classList.remove("hidden");
   const scoreText = `${result.score}/${result.maxScore}`;
-  const outcome = result.percentage >= 80
-    ? { title: "已達成本次標準", next: "你可以查看各題回饋，確認哪些判斷已掌握、哪些仍值得複習。" }
-    : result.percentage >= 60
-      ? { title: "已完成，建議補強", next: "部分題目仍有改善空間，建議先查看各題回饋，再安排補強。" }
-      : { title: "需要進一步補強", next: "建議依各題回饋重新確認關鍵內容，完成補強後再進行一次驗證。" };
+  const outcome = result.proficiency
+    ? { title: result.proficiency.label, next: result.proficiency.recommendation }
+    : result.percentage >= 80
+      ? { title: "已達成本次標準", next: "你可以查看各題回饋，確認哪些判斷已掌握、哪些仍值得複習。" }
+      : result.percentage >= 60
+        ? { title: "已完成，建議補強", next: "部分題目仍有改善空間，建議先查看各題回饋，再安排補強。" }
+        : { title: "需要進一步補強", next: "建議依各題回饋重新確認關鍵內容，完成補強後再進行一次驗證。" };
   const leafResults = flattenResultItems(result.questionResults);
   const correctCount = leafResults.filter((item) => item.status === "correct").length;
+  const competencyProfile = Array.isArray(result.competencies) && result.competencies.length
+    ? `
+      <section class="competency-profile">
+        <h3>能力面向</h3>
+        <div class="competency-list">
+          ${result.competencies.map((item) => `
+            <div class="competency-row">
+              <div><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.score)} / ${escapeHtml(item.maxScore)}</span></div>
+              <div class="competency-track"><span style="width:${Math.max(0, Math.min(100, Number(item.percentage || 0)))}%"></span></div>
+              <b>${escapeHtml(item.percentage)}%</b>
+            </div>`).join("")}
+        </div>
+      </section>`
+    : "";
   elements.resultPanel.innerHTML = `
     <div class="score-hero">
       <div class="score-ring" style="--score:${result.percentage}%"><span>${result.percentage}%</span></div>
@@ -509,6 +567,7 @@ function renderResult(result, logs) {
         </div>
       </div>
     </div>
+    ${competencyProfile}
     <h3 class="result-section-title">各題結果與回饋</h3>
     <div class="result-list">
       ${result.questionResults.map(renderResultItem).join("")}
@@ -631,7 +690,9 @@ async function loadAdminSurvey() {
   if (!elements.adminQuestionnaireSelect.value) return;
   try {
     const data = await api(`/api/questionnaires/${elements.adminQuestionnaireSelect.value}`);
+    state.adminSurvey = data.questionnaire;
     elements.jsonEditor.value = JSON.stringify(data.questionnaire, null, 2);
+    renderLifecycle(data.questionnaire);
     setMessage(elements.jsonMessage, "已載入問卷。", "success");
   } catch (error) {
     setMessage(elements.jsonMessage, error.message, "error");
@@ -643,11 +704,106 @@ async function saveAdminSurvey() {
     const questionnaire = JSON.parse(elements.jsonEditor.value);
     const data = await api("/api/questionnaires", { method: "POST", body: { questionnaire } });
     setMessage(elements.jsonMessage, `已儲存 ${data.questionnaire.title}`, "success");
-    await loadQuestionnaires();
-    elements.adminQuestionnaireSelect.value = data.questionnaire.id;
+    await loadQuestionnaires(data.questionnaire.id);
+    await loadAdminSurvey();
   } catch (error) {
     setMessage(elements.jsonMessage, error.message, "error");
   }
+}
+
+function renderLifecycle(questionnaire) {
+  const lifecycle = questionnaire.lifecycle || { status: "published", version: 1, audit: [] };
+  const status = lifecycle.status || "published";
+  const stages = ["draft", "review", "published", "closed", "archived"];
+  const activeIndex = stages.indexOf(status);
+  elements.lifecycleTitle.textContent = questionnaire.title;
+  elements.lifecycleStatus.textContent = lifecycleLabel(status);
+  elements.lifecycleStatus.className = `status lifecycle-${status}`;
+  elements.lifecycleVersion.textContent = `第 ${Number(lifecycle.version || 1)} 版`;
+  elements.lifecycleTrail.innerHTML = stages.map((stage, index) => `
+    <li class="${index < activeIndex ? "complete" : ""} ${stage === status ? "active" : ""}">
+      <span>${index + 1}</span>
+      <strong>${escapeHtml(lifecycleLabel(stage))}</strong>
+    </li>`).join("");
+
+  const shareUrl = buildShareUrl(questionnaire.id);
+  elements.shareLinkInput.value = shareUrl;
+  elements.copyShareLinkButton.disabled = status !== "published";
+  elements.openShareLinkButton.disabled = status !== "published";
+  const audit = Array.isArray(lifecycle.audit) ? lifecycle.audit : [];
+  const latest = audit.at(-1);
+  elements.lifecycleMeta.innerHTML = `
+    <span>負責人 <strong>${escapeHtml(lifecycle.owner || "未指定")}</strong></span>
+    <span>更新 <strong>${escapeHtml(formatTime(lifecycle.updatedAt || lifecycle.createdAt))}</strong></span>
+    <span>稽核 <strong>${audit.length} 筆${latest?.actor ? ` · ${escapeHtml(latest.actor)}` : ""}</strong></span>`;
+  elements.lifecycleActions.innerHTML = lifecycleTransitions(status).map((action) => `
+    <button type="button" data-lifecycle-status="${escapeHtml(action.status)}" class="${action.primary ? "primary" : ""}">
+      ${escapeHtml(action.label)}
+    </button>`).join("");
+  setMessage(elements.lifecycleMessage, status === "published" ? "問卷已開放，作答者可透過獨立連結進入。" : "此狀態不接受新的作答。", status === "published" ? "success" : "");
+}
+
+function lifecycleTransitions(status) {
+  return {
+    draft: [{ status: "review", label: "送交審核", primary: true }],
+    review: [
+      { status: "draft", label: "退回草稿" },
+      { status: "published", label: "核准發布", primary: true }
+    ],
+    published: [{ status: "closed", label: "關閉作答" }],
+    closed: [
+      { status: "published", label: "重新開放", primary: true },
+      { status: "archived", label: "封存問卷" }
+    ],
+    archived: [{ status: "closed", label: "取消封存" }]
+  }[status] || [];
+}
+
+async function handleLifecycleAction(event) {
+  const button = event.target.closest("button[data-lifecycle-status]");
+  if (!button || !state.adminSurvey) return;
+  const nextStatus = button.dataset.lifecycleStatus;
+  if (["closed", "archived"].includes(nextStatus) && !window.confirm(`確定要${lifecycleLabel(nextStatus)}「${state.adminSurvey.title}」嗎？`)) return;
+  button.disabled = true;
+  setMessage(elements.lifecycleMessage, "正在更新問卷狀態");
+  try {
+    const data = await api(`/api/questionnaires/${state.adminSurvey.id}/lifecycle`, {
+      method: "PATCH",
+      body: {
+        status: nextStatus,
+        actor: "questionnaire-admin",
+        note: `管理端變更為${lifecycleLabel(nextStatus)}`
+      }
+    });
+    await loadQuestionnaires(data.questionnaire.id);
+    await loadAdminSurvey();
+  } catch (error) {
+    setMessage(elements.lifecycleMessage, error.message, "error");
+    button.disabled = false;
+  }
+}
+
+function buildShareUrl(questionnaireId) {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("survey", questionnaireId);
+  return url.toString();
+}
+
+async function copyShareLink() {
+  if (!elements.shareLinkInput.value) return;
+  try {
+    await navigator.clipboard.writeText(elements.shareLinkInput.value);
+  } catch {
+    elements.shareLinkInput.select();
+    document.execCommand("copy");
+  }
+  setMessage(elements.lifecycleMessage, "已複製獨立作答連結。", "success");
+}
+
+function openShareLink() {
+  if (elements.shareLinkInput.value) window.open(elements.shareLinkInput.value, "_blank", "noopener");
 }
 
 async function generateQuestionnaire() {
@@ -806,12 +962,25 @@ function formatDuration(seconds) {
 }
 
 function formatTime(value) {
+  if (!value) return "--";
   return new Intl.DateTimeFormat("zh-Hant", {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function lifecycleLabel(status) {
+  return (
+    {
+      draft: "草稿",
+      review: "審核中",
+      published: "已發布",
+      closed: "已關閉",
+      archived: "已封存"
+    }[status] || status
+  );
 }
 
 function statusLabel(status) {

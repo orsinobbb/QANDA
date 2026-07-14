@@ -69,6 +69,7 @@
               問卷
               <select id="questionnaireSelect"></select>
             </label>
+            <p id="directLinkHint" class="direct-link-hint hidden">此作答連結已指定卷別。</p>
             <label>
               人員代號
               <input id="personIdInput" value="A001" autocomplete="username" />
@@ -147,6 +148,35 @@
 
       <section id="adminView" class="view">
         <div class="admin-grid">
+          <section class="admin-panel lifecycle-panel">
+            <div class="panel-title">
+              <div>
+                <small class="step-indicator">問卷治理</small>
+                <span id="lifecycleTitle">問卷生命週期</span>
+              </div>
+              <div class="lifecycle-heading-meta">
+                <span id="lifecycleStatus" class="status">--</span>
+                <small id="lifecycleVersion">第 -- 版</small>
+              </div>
+            </div>
+            <ol id="lifecycleTrail" class="lifecycle-trail" aria-label="問卷生命週期"></ol>
+            <div class="distribution-row">
+              <label>
+                獨立作答連結
+                <input id="shareLinkInput" readonly />
+              </label>
+              <div class="distribution-actions">
+                <button id="copyShareLinkButton" type="button">複製連結</button>
+                <button id="openShareLinkButton" type="button">開啟作答頁</button>
+              </div>
+            </div>
+            <div class="lifecycle-footer">
+              <div id="lifecycleMeta" class="lifecycle-meta"></div>
+              <div id="lifecycleActions" class="admin-actions"></div>
+            </div>
+            <div id="lifecycleMessage" class="message" role="status" aria-live="polite"></div>
+          </section>
+
           <section class="admin-panel json-panel">
             <div class="panel-title">
               <span>問卷 JSON</span>

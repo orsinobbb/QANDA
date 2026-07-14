@@ -21,6 +21,16 @@ http://localhost:4173
 序號：STAR-2026
 ```
 
+## AI 協作後端程式設計評量
+
+三份考卷依能力深度分層，每份 100 分，結果會同時呈現總分、程度判定與各能力面向：
+
+1. [第一份：基礎診斷](https://orsinobbb.github.io/QANDA/?survey=ai-backend-foundation)
+2. [第二份：實作能力](https://orsinobbb.github.io/QANDA/?survey=ai-backend-implementation)
+3. [第三份：整合與上線決策](https://orsinobbb.github.io/QANDA/?survey=ai-backend-production)
+
+命題藍圖與各卷使用時機請見 [`docs/ai-backend-assessment-blueprint.md`](docs/ai-backend-assessment-blueprint.md)。
+
 ## 功能範圍
 
 - `data/questionnaires/*.json`：一份 JSON 就是一張問卷。
@@ -30,6 +40,8 @@ http://localhost:4173
 - `GET /api/results`：搜尋與分類後端作答結果。
 - `GET /api/results/export.csv`：匯出 CSV。
 - `POST /api/ai/questionnaires`：AI 出卷，沒有金鑰時會產生可測的本機草稿。
+- 問卷生命週期：`draft → review → published → closed → archived`，管理端可執行合法轉換、查看版本與稽核紀錄。
+- `PATCH /api/questionnaires/:id/lifecycle`：變更問卷狀態；只有 `published` 問卷能啟動新作答。
 
 ## AI 設定
 

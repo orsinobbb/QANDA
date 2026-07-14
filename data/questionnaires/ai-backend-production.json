@@ -1,0 +1,179 @@
+{
+  "id": "ai-backend-production",
+  "title": "AI 協作後端程式設計｜第三份：整合與上線決策",
+  "description": "透過權限、安全、可觀測性、CI/CD 與事故處理，驗證學生是否能負責 AI 協作成果的正式環境交付。",
+  "courseReference": "AI 協作後端程式設計",
+  "assessmentLevel": "production",
+  "durationSeconds": 2400,
+  "passPercentage": 75,
+  "competencies": [
+    { "id": "security", "label": "認證授權與安全" },
+    { "id": "observability", "label": "可觀測性與事故處理" },
+    { "id": "delivery", "label": "部署與效能" },
+    { "id": "ai-governance", "label": "AI 治理與責任" }
+  ],
+  "proficiencyRules": [
+    { "minPercentage": 85, "label": "可主責上線交付", "recommendation": "具備正式環境決策基礎，可安排綜合專題與實際 code review。" },
+    { "minPercentage": 70, "label": "可參與上線交付", "recommendation": "可在資深工程師審查下交付，優先補強最低能力面向。" },
+    { "minPercentage": 50, "label": "需完成情境補強", "recommendation": "建議完成安全與事故演練後再承擔正式環境變更。" },
+    { "minPercentage": 0, "label": "尚未達上線門檻", "recommendation": "回到實作能力卷，先建立可靠性、測試與資料一致性能力。" }
+  ],
+  "lifecycle": {
+    "status": "published",
+    "version": 1,
+    "owner": "AI 協作後端程式設計課程團隊",
+    "createdAt": "2026-07-14T03:00:00.000Z",
+    "updatedAt": "2026-07-14T03:30:00.000Z",
+    "submittedForReviewAt": "2026-07-14T03:10:00.000Z",
+    "publishedAt": "2026-07-14T03:30:00.000Z",
+    "audit": [
+      { "from": null, "to": "draft", "at": "2026-07-14T03:00:00.000Z", "actor": "course-team", "note": "建立整合與上線決策卷" },
+      { "from": "draft", "to": "review", "at": "2026-07-14T03:10:00.000Z", "actor": "course-team", "note": "完成安全與事故情境審查" },
+      { "from": "review", "to": "published", "at": "2026-07-14T03:30:00.000Z", "actor": "course-owner", "note": "發布整合與上線決策卷" }
+    ]
+  },
+  "accessRoster": [
+    { "personId": "A001", "displayName": "測試作答者", "serial": "STAR-2026", "group": "demo" },
+    { "personId": "STUDENT01", "displayName": "課程學員", "serial": "AI-BACKEND-2026", "group": "AI 協作後端程式設計" }
+  ],
+  "questions": [
+    {
+      "id": "p_q1",
+      "type": "boolean",
+      "title": "最小權限",
+      "prompt": "應用程式、資料庫帳號與部署服務都應只取得完成任務所需的最小權限。",
+      "competency": "security",
+      "correctAnswer": true,
+      "maxScore": 8
+    },
+    {
+      "id": "p_q2",
+      "type": "single",
+      "title": "物件層授權",
+      "prompt": "已登入的使用者修改 /orders/42 前，後端還必須確認什麼？",
+      "competency": "security",
+      "options": [
+        { "value": "authorization", "label": "使用者是否有權操作第 42 號訂單" },
+        { "value": "logged-in", "label": "只要有登入就可操作所有訂單" },
+        { "value": "frontend", "label": "前端是否隱藏修改按鈕" }
+      ],
+      "correctAnswer": "authorization",
+      "maxScore": 8
+    },
+    {
+      "id": "p_q3",
+      "type": "multiple",
+      "title": "可觀測性訊號",
+      "prompt": "調查 API 延遲突然升高時，哪些資料應彼此關聯？",
+      "competency": "observability",
+      "options": [
+        { "value": "metrics", "label": "延遲、錯誤率、流量與資源指標" },
+        { "value": "logs", "label": "具 request ID 的結構化日誌" },
+        { "value": "traces", "label": "跨服務 trace" },
+        { "value": "guess", "label": "只依最後一次 AI 對話猜測" }
+      ],
+      "correctAnswer": ["metrics", "logs", "traces"],
+      "maxScore": 10
+    },
+    {
+      "id": "p_q4",
+      "type": "short",
+      "title": "機密輪替",
+      "prompt": "發現 API key 已被提交到公開 Git 儲存庫時，第一個必須執行的安全動作是什麼？",
+      "competency": "security",
+      "acceptedAnswers": ["撤銷", "停用", "輪替", "作廢", "revoke", "rotate"],
+      "matchMode": "contains",
+      "maxScore": 8
+    },
+    {
+      "id": "p_q5",
+      "type": "composite",
+      "title": "上線後錯誤率升高",
+      "prompt": "AI 協作完成的版本部署後，5xx 錯誤率在十分鐘內快速升高。",
+      "questions": [
+        {
+          "id": "p_q5a",
+          "type": "single",
+          "title": "立即處置",
+          "prompt": "確認新版本是主要變因時，最合理的第一個交付決策是什麼？",
+          "competency": "delivery",
+          "options": [
+            { "value": "rollback", "label": "依既定程序回滾或停止流量擴大" },
+            { "value": "wait", "label": "等待一小時，讓錯誤自行消失" },
+            { "value": "hide", "label": "關閉監控告警" }
+          ],
+          "correctAnswer": "rollback",
+          "maxScore": 10
+        },
+        {
+          "id": "p_q5b",
+          "type": "multiple",
+          "title": "事故證據",
+          "prompt": "哪些證據應被保留並放入事故時間線？",
+          "competency": "observability",
+          "options": [
+            { "value": "deploy", "label": "部署版本、時間與變更 diff" },
+            { "value": "signals", "label": "指標、日誌與 trace" },
+            { "value": "actions", "label": "處置指令、決策人與結果" },
+            { "value": "delete", "label": "為避免究責，刪除 AI 對話與執行紀錄" }
+          ],
+          "correctAnswer": ["deploy", "signals", "actions"],
+          "maxScore": 12
+        },
+        {
+          "id": "p_q5c",
+          "type": "short",
+          "title": "事故應變與復盤",
+          "prompt": "請用 5 至 10 句說明從止血、定位到恢復服務與事後改善的完整流程，並指出 AI 在其中可以與不可以替人決定的事項。",
+          "competency": "ai-governance",
+          "gradingMode": "ai",
+          "rubric": "滿分需涵蓋：確認影響與指揮角色、回滾或隔離止血、保留證據並以指標日誌追蹤定位、驗證恢復、通知利害關係人、無責復盤與追蹤項目；AI 可協助整理證據、提出假設與草擬修復，但風險判斷、上線決策與責任仍由人員承擔。",
+          "maxScore": 18
+        }
+      ]
+    },
+    {
+      "id": "p_q6",
+      "type": "single",
+      "title": "部署品質閘門",
+      "prompt": "哪一種 CI/CD 設計最能降低未驗證變更直接進入正式環境的風險？",
+      "competency": "delivery",
+      "options": [
+        { "value": "gates", "label": "自動測試、安全掃描、審核與分階段部署閘門" },
+        { "value": "direct", "label": "每次 AI 產出後直接部署正式環境" },
+        { "value": "manual-only", "label": "取消自動檢查，只依人工記憶操作" }
+      ],
+      "correctAnswer": "gates",
+      "maxScore": 8
+    },
+    {
+      "id": "p_q7",
+      "type": "multiple",
+      "title": "AI 變更治理",
+      "prompt": "為了讓 AI 協作變更可追溯，至少應記錄哪些項目？",
+      "competency": "ai-governance",
+      "options": [
+        { "value": "model", "label": "模型與主要提示內容或版本" },
+        { "value": "diff", "label": "產生及最終採用的程式差異" },
+        { "value": "verification", "label": "測試、審查人與核准結果" },
+        { "value": "none", "label": "只記錄最後成功部署時間" }
+      ],
+      "correctAnswer": ["model", "diff", "verification"],
+      "maxScore": 10
+    },
+    {
+      "id": "p_q8",
+      "type": "single",
+      "title": "慢查詢優化",
+      "prompt": "決定新增資料庫索引前，最有說服力的依據是哪一項？",
+      "competency": "delivery",
+      "options": [
+        { "value": "plan", "label": "實際查詢樣本、執行計畫與量測結果" },
+        { "value": "all-index", "label": "替每個欄位都建立索引" },
+        { "value": "ai-says", "label": "AI 說可能有效，不需量測" }
+      ],
+      "correctAnswer": "plan",
+      "maxScore": 8
+    }
+  ]
+}

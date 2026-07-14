@@ -1,0 +1,179 @@
+{
+  "id": "ai-backend-implementation",
+  "title": "AI 協作後端程式設計｜第二份：實作能力",
+  "description": "以資料一致性、遷移、重試、測試與除錯情境，驗證學生能否把 AI 建議轉成可靠的後端實作。",
+  "courseReference": "AI 協作後端程式設計",
+  "assessmentLevel": "implementation",
+  "durationSeconds": 1800,
+  "passPercentage": 70,
+  "competencies": [
+    { "id": "data", "label": "資料庫與一致性" },
+    { "id": "reliability", "label": "可靠性與錯誤處理" },
+    { "id": "testing", "label": "測試與除錯" },
+    { "id": "ai-review", "label": "AI 程式審查" }
+  ],
+  "proficiencyRules": [
+    { "minPercentage": 80, "label": "具備可靠實作能力", "recommendation": "可進入正式環境整合卷，處理安全、部署與可觀測性。" },
+    { "minPercentage": 60, "label": "可實作但需指導", "recommendation": "針對資料一致性與測試策略完成一次情境實作後再測。" },
+    { "minPercentage": 0, "label": "實作基礎不足", "recommendation": "建議回到基礎診斷卷，補足 API 與資料流觀念。" }
+  ],
+  "lifecycle": {
+    "status": "published",
+    "version": 1,
+    "owner": "AI 協作後端程式設計課程團隊",
+    "createdAt": "2026-07-14T02:00:00.000Z",
+    "updatedAt": "2026-07-14T02:30:00.000Z",
+    "submittedForReviewAt": "2026-07-14T02:10:00.000Z",
+    "publishedAt": "2026-07-14T02:30:00.000Z",
+    "audit": [
+      { "from": null, "to": "draft", "at": "2026-07-14T02:00:00.000Z", "actor": "course-team", "note": "建立實作能力題卷" },
+      { "from": "draft", "to": "review", "at": "2026-07-14T02:10:00.000Z", "actor": "course-team", "note": "檢查情境題與配分" },
+      { "from": "review", "to": "published", "at": "2026-07-14T02:30:00.000Z", "actor": "course-owner", "note": "發布實作能力卷" }
+    ]
+  },
+  "accessRoster": [
+    { "personId": "A001", "displayName": "測試作答者", "serial": "STAR-2026", "group": "demo" },
+    { "personId": "STUDENT01", "displayName": "課程學員", "serial": "AI-BACKEND-2026", "group": "AI 協作後端程式設計" }
+  ],
+  "questions": [
+    {
+      "id": "i_q1",
+      "type": "boolean",
+      "title": "交易原子性",
+      "prompt": "建立訂單與扣除庫存屬於同一交易時，任一步驟失敗都應回滾整筆交易。",
+      "competency": "data",
+      "correctAnswer": true,
+      "maxScore": 8
+    },
+    {
+      "id": "i_q2",
+      "type": "single",
+      "title": "查詢效能",
+      "prompt": "列表 API 先查 100 筆訂單，再逐筆查詢使用者，最可能形成什麼問題？",
+      "competency": "data",
+      "options": [
+        { "value": "n-plus-one", "label": "N+1 查詢" },
+        { "value": "dead-code", "label": "無效程式碼" },
+        { "value": "csrf", "label": "CSRF" },
+        { "value": "other", "label": "其它", "allowText": true, "textPlaceholder": "請填寫問題名稱" }
+      ],
+      "correctAnswer": "n-plus-one",
+      "maxScore": 8
+    },
+    {
+      "id": "i_q3",
+      "type": "multiple",
+      "title": "資料庫遷移",
+      "prompt": "正式環境新增 NOT NULL 欄位時，哪些做法較安全？",
+      "competency": "data",
+      "options": [
+        { "value": "backfill", "label": "先建立可相容欄位並回填既有資料" },
+        { "value": "staged", "label": "分階段部署程式與約束" },
+        { "value": "rollback", "label": "準備回復或前向修正方案" },
+        { "value": "manual", "label": "直接在線上資料庫手動改表且不留版本" }
+      ],
+      "correctAnswer": ["backfill", "staged", "rollback"],
+      "maxScore": 10
+    },
+    {
+      "id": "i_q4",
+      "type": "short",
+      "title": "並行更新控制",
+      "prompt": "以 version 欄位比對更新前後版本、衝突時拒絕寫入的機制稱為什麼鎖？",
+      "competency": "data",
+      "acceptedAnswers": ["樂觀鎖", "乐观锁", "optimistic lock", "optimistic locking"],
+      "matchMode": "contains",
+      "maxScore": 8
+    },
+    {
+      "id": "i_q5",
+      "type": "composite",
+      "title": "付款重試事件",
+      "prompt": "外部付款服務逾時，客戶端重送後出現重複扣款，請處理下列子題。",
+      "questions": [
+        {
+          "id": "i_q5a",
+          "type": "single",
+          "title": "第一道防線",
+          "prompt": "API 設計最應優先加入哪一項機制？",
+          "competency": "reliability",
+          "options": [
+            { "value": "idempotency-key", "label": "Idempotency key 與相同請求結果重用" },
+            { "value": "long-timeout", "label": "把逾時延長到十分鐘" },
+            { "value": "hide-error", "label": "永遠回傳成功，避免重送" }
+          ],
+          "correctAnswer": "idempotency-key",
+          "maxScore": 10
+        },
+        {
+          "id": "i_q5b",
+          "type": "multiple",
+          "title": "資料與追蹤保護",
+          "prompt": "哪些措施可共同降低重複扣款並提升可追查性？",
+          "competency": "reliability",
+          "options": [
+            { "value": "unique", "label": "付款意圖或外部交易編號唯一約束" },
+            { "value": "transaction", "label": "狀態更新使用交易與明確狀態機" },
+            { "value": "correlation", "label": "請求與外部交易共用 correlation ID" },
+            { "value": "blind-retry", "label": "所有錯誤都無限立即重試" }
+          ],
+          "correctAnswer": ["unique", "transaction", "correlation"],
+          "maxScore": 12
+        },
+        {
+          "id": "i_q5c",
+          "type": "short",
+          "title": "修復與驗證計畫",
+          "prompt": "請用 4 至 8 句提出修復順序，並說明如何用測試證明不再重複扣款。",
+          "competency": "reliability",
+          "gradingMode": "ai",
+          "rubric": "滿分需涵蓋：重現與界定影響、冪等鍵、資料庫唯一約束或交易、可控重試、併發或整合測試、既有重複資料處理、監控驗證。應重視順序與可驗證性。",
+          "maxScore": 18
+        }
+      ]
+    },
+    {
+      "id": "i_q6",
+      "type": "single",
+      "title": "跨層行為測試",
+      "prompt": "要驗證 API 驗證、Service 與測試資料庫能一起正確運作，最適合哪種測試？",
+      "competency": "testing",
+      "options": [
+        { "value": "integration", "label": "整合測試" },
+        { "value": "lint", "label": "只執行 lint" },
+        { "value": "snapshot-ui", "label": "前端畫面快照" }
+      ],
+      "correctAnswer": "integration",
+      "maxScore": 8
+    },
+    {
+      "id": "i_q7",
+      "type": "multiple",
+      "title": "AI 產出驗收",
+      "prompt": "AI 修改交易流程後，合併前應檢查哪些項目？",
+      "competency": "ai-review",
+      "options": [
+        { "value": "diff", "label": "diff 是否只涵蓋預期範圍" },
+        { "value": "failure", "label": "失敗、逾時與併發路徑" },
+        { "value": "tests", "label": "新舊測試與可重現案例" },
+        { "value": "trust", "label": "模型自稱完成即可直接合併" }
+      ],
+      "correctAnswer": ["diff", "failure", "tests"],
+      "maxScore": 10
+    },
+    {
+      "id": "i_q8",
+      "type": "single",
+      "title": "版本衝突回應",
+      "prompt": "用戶更新資源時版本已落後，伺服器偵測到狀態衝突，常見的 HTTP status 是哪一個？",
+      "competency": "reliability",
+      "options": [
+        { "value": "409", "label": "409 Conflict" },
+        { "value": "201", "label": "201 Created" },
+        { "value": "301", "label": "301 Moved Permanently" }
+      ],
+      "correctAnswer": "409",
+      "maxScore": 8
+    }
+  ]
+}

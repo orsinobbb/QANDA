@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateSurvey } from "./surveyEngine.js";
+import { prepareSurveyForSave, validateSurvey } from "./surveyEngine.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataRoot = path.join(__dirname, "..", "data");
@@ -31,6 +31,21 @@ export async function getQuestionnaire(id) {
 }
 
 export async function saveQuestionnaire(survey) {
+  const existing = survey?.id ? await getQuestionnaire(survey.id) : null;
+  const prepared = prepareSurveyForSave(survey, existing);
+  const errors = validateSurvey(prepared);
+  if (errors.length) {
+    const error = new Error("Invalid questionnaire");
+    error.statusCode = 422;
+    error.details = errors;
+    throw error;
+  }
+  await ensureDataDirs();
+  await writeJson(path.join(questionnaireDir, `${prepared.id}.json`), prepared);
+  return prepared;
+}
+
+export async function saveQuestionnaireLifecycle(survey) {
   const errors = validateSurvey(survey);
   if (errors.length) {
     const error = new Error("Invalid questionnaire");
@@ -79,4 +94,3 @@ async function writeJson(file, value) {
   await fs.writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   await fs.rename(tmp, file);
 }
-

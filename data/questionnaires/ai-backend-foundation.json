@@ -1,0 +1,159 @@
+{
+  "id": "ai-backend-foundation",
+  "title": "AI 協作後端程式設計｜第一份：基礎診斷",
+  "description": "檢核 HTTP、REST API、輸入驗證、資料安全與 AI 協作基本觀念，適合作為課前診斷或基礎單元驗收。",
+  "courseReference": "AI 協作後端程式設計",
+  "assessmentLevel": "foundation",
+  "durationSeconds": 1200,
+  "passPercentage": 70,
+  "competencies": [
+    { "id": "api", "label": "HTTP 與 API 設計" },
+    { "id": "architecture", "label": "後端結構與資料流" },
+    { "id": "security", "label": "輸入與機密安全" },
+    { "id": "ai-collaboration", "label": "AI 協作與驗證" }
+  ],
+  "proficiencyRules": [
+    { "minPercentage": 80, "label": "基礎能力穩固", "recommendation": "可進入實作能力卷，開始處理資料一致性、測試與錯誤情境。" },
+    { "minPercentage": 60, "label": "基礎能力待補強", "recommendation": "先補強低於 60% 的能力面向，再進入完整 API 實作。" },
+    { "minPercentage": 0, "label": "建議完成先修", "recommendation": "建議先複習 HTTP、JSON、REST 與基本安全觀念後再測。" }
+  ],
+  "lifecycle": {
+    "status": "published",
+    "version": 1,
+    "owner": "AI 協作後端程式設計課程團隊",
+    "createdAt": "2026-07-14T01:00:00.000Z",
+    "updatedAt": "2026-07-14T01:30:00.000Z",
+    "submittedForReviewAt": "2026-07-14T01:10:00.000Z",
+    "publishedAt": "2026-07-14T01:30:00.000Z",
+    "audit": [
+      { "from": null, "to": "draft", "at": "2026-07-14T01:00:00.000Z", "actor": "course-team", "note": "依課程能力矩陣建立題卷" },
+      { "from": "draft", "to": "review", "at": "2026-07-14T01:10:00.000Z", "actor": "course-team", "note": "完成答案與配分檢核" },
+      { "from": "review", "to": "published", "at": "2026-07-14T01:30:00.000Z", "actor": "course-owner", "note": "發布基礎診斷卷" }
+    ]
+  },
+  "accessRoster": [
+    { "personId": "A001", "displayName": "測試作答者", "serial": "STAR-2026", "group": "demo" },
+    { "personId": "STUDENT01", "displayName": "課程學員", "serial": "AI-BACKEND-2026", "group": "AI 協作後端程式設計" }
+  ],
+  "questions": [
+    {
+      "id": "f_q1",
+      "type": "boolean",
+      "title": "資源導向 API",
+      "prompt": "REST API 的路徑應優先表達資源，操作意圖通常由 HTTP method 表達。",
+      "competency": "api",
+      "correctAnswer": true,
+      "maxScore": 8
+    },
+    {
+      "id": "f_q2",
+      "type": "single",
+      "title": "輸入驗證失敗",
+      "prompt": "用戶送出的 JSON 缺少必要欄位，最合適的第一類回應是哪一項？",
+      "competency": "api",
+      "options": [
+        { "value": "client-error", "label": "回傳 4xx，並提供可定位欄位的錯誤資訊" },
+        { "value": "server-error", "label": "一律回傳 500，避免透露細節" },
+        { "value": "success", "label": "回傳 200，再把錯誤寫入伺服器日誌" },
+        { "value": "other", "label": "其它", "allowText": true, "textPlaceholder": "請說明處理方式" }
+      ],
+      "correctAnswer": "client-error",
+      "maxScore": 8
+    },
+    {
+      "id": "f_q3",
+      "type": "multiple",
+      "title": "交付 AI 前的上下文",
+      "prompt": "請選出能顯著提升 AI 產出後端程式品質的資訊。",
+      "competency": "ai-collaboration",
+      "options": [
+        { "value": "acceptance", "label": "明確驗收條件與失敗情境" },
+        { "value": "conventions", "label": "既有架構、命名與相依套件限制" },
+        { "value": "tests", "label": "預期測試與可重現範例" },
+        { "value": "vague", "label": "只說「幫我做得更好」" }
+      ],
+      "correctAnswer": ["acceptance", "conventions", "tests"],
+      "maxScore": 12
+    },
+    {
+      "id": "f_q4",
+      "type": "short",
+      "title": "重複請求安全性",
+      "prompt": "同一個建立訂單請求重送多次仍只產生一筆訂單，這項特性稱為什麼？",
+      "competency": "api",
+      "acceptedAnswers": ["冪等", "幂等", "idempotency", "idempotent"],
+      "matchMode": "contains",
+      "maxScore": 10
+    },
+    {
+      "id": "f_q5",
+      "type": "composite",
+      "title": "新增會員端點",
+      "prompt": "你要與 AI 協作完成 POST /users，請依後端責任分工回答。",
+      "questions": [
+        {
+          "id": "f_q5a",
+          "type": "single",
+          "title": "責任分層",
+          "prompt": "哪一種流程最有利於測試與維護？",
+          "competency": "architecture",
+          "options": [
+            { "value": "layered", "label": "Route 接收請求，Service 處理規則，Repository 存取資料" },
+            { "value": "all-route", "label": "驗證、商業規則、SQL 全部寫在 Route" },
+            { "value": "frontend-db", "label": "讓前端直接連線資料庫" }
+          ],
+          "correctAnswer": "layered",
+          "maxScore": 10
+        },
+        {
+          "id": "f_q5b",
+          "type": "multiple",
+          "title": "機密資料處理",
+          "prompt": "哪些做法是必要的？",
+          "competency": "security",
+          "options": [
+            { "value": "env", "label": "金鑰由環境變數或密鑰管理服務提供" },
+            { "value": "redact", "label": "日誌遮蔽 token、密碼與個資" },
+            { "value": "parameter", "label": "資料庫查詢使用參數化輸入" },
+            { "value": "commit", "label": "把測試金鑰提交到 Git，方便團隊取用" }
+          ],
+          "correctAnswer": ["env", "redact", "parameter"],
+          "maxScore": 12
+        }
+      ]
+    },
+    {
+      "id": "f_q6",
+      "type": "single",
+      "title": "SQL 注入防護",
+      "prompt": "查詢使用者資料時，哪一項是最基本且正確的做法？",
+      "competency": "security",
+      "options": [
+        { "value": "parameterized", "label": "使用參數化查詢或 ORM 綁定值" },
+        { "value": "concat", "label": "把輸入直接串接到 SQL 字串" },
+        { "value": "client-check", "label": "只依賴前端驗證" }
+      ],
+      "correctAnswer": "parameterized",
+      "maxScore": 10
+    },
+    {
+      "id": "f_q7",
+      "type": "boolean",
+      "title": "AI 產出責任",
+      "prompt": "AI 產生的程式通過語法檢查後，仍需由人員檢視差異、執行測試並確認需求。",
+      "competency": "ai-collaboration",
+      "correctAnswer": true,
+      "maxScore": 10
+    },
+    {
+      "id": "f_q8",
+      "type": "short",
+      "title": "AI 協作閉環",
+      "prompt": "請用 3 至 6 句說明：你會如何把一項後端需求交給 AI，並驗證產出可以合併？",
+      "competency": "ai-collaboration",
+      "gradingMode": "ai",
+      "rubric": "滿分回答需包含：釐清需求與驗收條件、提供既有程式上下文、限制變更範圍、檢視 diff、執行測試或重現案例、由人員承擔最終判斷。缺少一個核心步驟應酌量扣分。",
+      "maxScore": 20
+    }
+  ]
+}

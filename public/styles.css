@@ -322,6 +322,13 @@ main {
   text-align: center;
 }
 
+.direct-link-hint {
+  margin: -6px 0 0;
+  color: var(--teal-dark);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .panel-title {
   display: flex;
   align-items: center;
@@ -808,6 +815,65 @@ main {
   font-size: 1rem;
 }
 
+.competency-profile {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.competency-profile h3 {
+  margin: 0 0 14px;
+  font-size: 1rem;
+}
+
+.competency-list {
+  display: grid;
+  gap: 11px;
+}
+
+.competency-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.65fr) minmax(180px, 1fr) 48px;
+  gap: 14px;
+  align-items: center;
+}
+
+.competency-row > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.competency-row strong {
+  font-size: 0.9rem;
+}
+
+.competency-row span,
+.competency-row b {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.competency-row b {
+  color: var(--ink);
+  text-align: right;
+}
+
+.competency-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #e6eaec;
+}
+
+.competency-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--teal);
+}
+
 .submit-dialog {
   width: min(560px, calc(100vw - 28px));
   border: 0;
@@ -923,6 +989,139 @@ main {
   display: grid;
   gap: 14px;
   padding: 18px;
+}
+
+.lifecycle-panel {
+  grid-column: 1 / -1;
+}
+
+.lifecycle-heading-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lifecycle-heading-meta small {
+  color: var(--muted);
+}
+
+.lifecycle-trail {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 4px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lifecycle-trail li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: #f7f8f8;
+}
+
+.lifecycle-trail li span {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e4e8ea;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.lifecycle-trail li strong {
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+}
+
+.lifecycle-trail li.complete {
+  border-color: #b9d6cf;
+  color: var(--teal-dark);
+  background: #f2f9f7;
+}
+
+.lifecycle-trail li.active {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: #fff;
+  box-shadow: inset 0 -3px 0 var(--teal);
+}
+
+.lifecycle-trail li.complete span,
+.lifecycle-trail li.active span {
+  background: var(--teal);
+  color: #fff;
+}
+
+.distribution-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.distribution-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.lifecycle-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+
+.lifecycle-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.lifecycle-meta span {
+  display: grid;
+  gap: 2px;
+}
+
+.lifecycle-meta strong {
+  color: var(--ink);
+}
+
+.status.lifecycle-draft {
+  background: #eef2f4;
+}
+
+.status.lifecycle-review {
+  background: #fff4dc;
+  color: #7a5818;
+}
+
+.status.lifecycle-published {
+  background: #e8f5f1;
+  color: var(--teal-dark);
+}
+
+.status.lifecycle-closed {
+  background: #fff0ec;
+  color: var(--coral);
+}
+
+.status.lifecycle-archived {
+  background: #ececf0;
+  color: #4f525a;
 }
 
 .json-panel {
@@ -1097,6 +1296,26 @@ tbody tr:hover {
     grid-template-columns: 1fr;
     gap: 4px;
   }
+
+  .lifecycle-trail {
+    grid-template-columns: repeat(5, minmax(96px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .distribution-row {
+    grid-template-columns: 1fr;
+  }
+
+  .distribution-actions,
+  .distribution-actions button {
+    flex: 1;
+  }
+
+  .lifecycle-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 560px) {
@@ -1150,5 +1369,20 @@ tbody tr:hover {
 
   .question-card {
     padding: 18px 15px;
+  }
+
+  .competency-row {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: 7px 10px;
+  }
+
+  .competency-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .distribution-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 }
