@@ -9,8 +9,12 @@ const state = {
   syncTimer: null,
   tickTimer: null,
   localDraft: null,
-  activeQuestionId: null
+  activeQuestionId: null,
+  resultSource: "local",
+  remoteResults: []
 };
+
+const SHEET_ADMIN_TOKEN_KEY = "qanda:sheet-admin-token";
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -60,6 +64,7 @@ const elements = {
   jsonEditor: $("#jsonEditor"),
   jsonMessage: $("#jsonMessage"),
   reloadJsonButton: $("#reloadJsonButton"),
+  syncQuestionBankButton: $("#syncQuestionBankButton"),
   saveJsonButton: $("#saveJsonButton"),
   lifecycleTitle: $("#lifecycleTitle"),
   lifecycleStatus: $("#lifecycleStatus"),
@@ -80,6 +85,10 @@ const elements = {
   resultKeywordInput: $("#resultKeywordInput"),
   searchResultsButton: $("#searchResultsButton"),
   exportButton: $("#exportButton"),
+  sheetAdminTokenInput: $("#sheetAdminTokenInput"),
+  connectSheetButton: $("#connectSheetButton"),
+  disconnectSheetButton: $("#disconnectSheetButton"),
+  resultSourceStatus: $("#resultSourceStatus"),
   resultsBody: $("#resultsBody"),
   resultDetail: $("#resultDetail")
 };
@@ -88,6 +97,7 @@ init();
 
 async function init() {
   bindEvents();
+  elements.sheetAdminTokenInput.value = sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY) || "";
   await Promise.all([checkHealth(), loadQuestionnaires()]);
   await loadAdminSurvey();
   await loadResults();
@@ -109,12 +119,15 @@ function bindEvents() {
   elements.adminQuestionnaireSelect.addEventListener("change", loadAdminSurvey);
   elements.reloadJsonButton.addEventListener("click", loadAdminSurvey);
   elements.saveJsonButton.addEventListener("click", saveAdminSurvey);
+  elements.syncQuestionBankButton.addEventListener("click", syncQuestionBank);
   elements.lifecycleActions.addEventListener("click", handleLifecycleAction);
   elements.copyShareLinkButton.addEventListener("click", copyShareLink);
   elements.openShareLinkButton.addEventListener("click", openShareLink);
   elements.generateButton.addEventListener("click", generateQuestionnaire);
   elements.searchResultsButton.addEventListener("click", loadResults);
   elements.exportButton.addEventListener("click", exportResults);
+  elements.connectSheetButton.addEventListener("click", connectSheetAdmin);
+  elements.disconnectSheetButton.addEventListener("click", disconnectSheetAdmin);
 }
 
 function showView(view) {
@@ -875,11 +888,42 @@ async function generateQuestionnaire() {
 }
 
 async function loadResults() {
-  const params = new URLSearchParams();
-  if (elements.resultQuestionnaireFilter.value) params.set("questionnaireId", elements.resultQuestionnaireFilter.value);
-  if (elements.resultStatusFilter.value) params.set("status", elements.resultStatusFilter.value);
-  if (elements.resultKeywordInput.value.trim()) params.set("keyword", elements.resultKeywordInput.value.trim());
-  const data = await api(`/api/results?${params}`);
+  const filters = {
+    questionnaireId: elements.resultQuestionnaireFilter.value,
+    status: elements.resultStatusFilter.value,
+    keyword: elements.resultKeywordInput.value.trim(),
+    limit: 500
+  };
+  let data;
+  const token = sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY);
+  if (configuredSheetEndpoint() && token) {
+    try {
+      const response = await sheetAdminApi("admin.results.list", { filters });
+      data = response.data;
+      state.resultSource = "google-sheet";
+      state.remoteResults = data.results || [];
+      elements.resultSourceStatus.textContent = `Google Sheet 集中結果 · ${data.total} 筆`;
+      elements.resultSourceStatus.className = "source-status connected";
+    } catch (error) {
+      state.resultSource = "google-sheet";
+      state.remoteResults = [];
+      data = { results: [] };
+      elements.resultSourceStatus.textContent = `Google Sheet 連線失敗：${error.message}`;
+      elements.resultSourceStatus.className = "source-status error";
+    }
+  } else {
+    const params = new URLSearchParams();
+    if (filters.questionnaireId) params.set("questionnaireId", filters.questionnaireId);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.keyword) params.set("keyword", filters.keyword);
+    data = await api(`/api/results?${params}`);
+    state.resultSource = "local";
+    state.remoteResults = [];
+    elements.resultSourceStatus.textContent = configuredSheetEndpoint()
+      ? "目前顯示本機結果；輸入管理權杖可讀取集中結果"
+      : "Google Sheet 尚未設定；目前顯示本機結果";
+    elements.resultSourceStatus.className = "source-status";
+  }
   elements.resultsBody.innerHTML = data.results.length
     ? data.results.map(renderResultRow).join("")
     : `<tr><td colspan="5">尚無結果</td></tr>`;
@@ -901,17 +945,25 @@ function renderResultRow(row) {
 }
 
 async function loadResultDetail(sessionId) {
-  const data = await api(`/api/results/${sessionId}`);
+  const data = state.resultSource === "google-sheet"
+    ? (await sheetAdminApi("admin.results.detail", { sessionId })).data
+    : await api(`/api/results/${sessionId}`);
   const summary = data.summary;
+  const competencyText = (data.competencies || []).map((item) => `${item.competencyLabel} ${item.percentage}%`).join(" · ");
   elements.resultDetail.innerHTML = `
     <strong>${escapeHtml(summary.participant.displayName)}</strong>
     · ${escapeHtml(summary.questionnaireTitle)}
     · ${escapeHtml(statusLabel(summary.status))}
     · 答案 ${escapeHtml(summary.answerCount)}
-    · 同步 ${escapeHtml(summary.lastSyncAt ? formatTime(summary.lastSyncAt) : "--")}`;
+    · 同步 ${escapeHtml(summary.lastSyncAt ? formatTime(summary.lastSyncAt) : "--")}
+    ${competencyText ? `<div class="result-detail-competencies">${escapeHtml(competencyText)}</div>` : ""}`;
 }
 
 function exportResults() {
+  if (state.resultSource === "google-sheet") {
+    exportRemoteResults();
+    return;
+  }
   if (window.__STATIC_API__?.exportResults) {
     window.__STATIC_API__.exportResults();
     return;
@@ -921,6 +973,94 @@ function exportResults() {
   if (elements.resultStatusFilter.value) params.set("status", elements.resultStatusFilter.value);
   if (elements.resultKeywordInput.value.trim()) params.set("keyword", elements.resultKeywordInput.value.trim());
   window.location.href = `/api/results/export.csv?${params}`;
+}
+
+async function connectSheetAdmin() {
+  const token = elements.sheetAdminTokenInput.value.trim();
+  if (!token) {
+    elements.resultSourceStatus.textContent = "請輸入管理權杖";
+    elements.resultSourceStatus.className = "source-status error";
+    return;
+  }
+  sessionStorage.setItem(SHEET_ADMIN_TOKEN_KEY, token);
+  await loadResults();
+}
+
+async function disconnectSheetAdmin() {
+  sessionStorage.removeItem(SHEET_ADMIN_TOKEN_KEY);
+  elements.sheetAdminTokenInput.value = "";
+  await loadResults();
+}
+
+async function syncQuestionBank() {
+  if (!state.adminSurvey) return;
+  if (!sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY)) {
+    setMessage(elements.jsonMessage, "請先在結果搜尋區連線 Google Sheet。", "error");
+    return;
+  }
+  elements.syncQuestionBankButton.disabled = true;
+  setMessage(elements.jsonMessage, "正在同步題庫");
+  try {
+    const response = await sheetAdminApi("admin.question-bank.import", { questionnaire: state.adminSurvey });
+    const result = response.data;
+    setMessage(elements.jsonMessage, `題庫同步完成：新增 ${result.importedQuestions} 題，建立 ${result.linkedItems} 筆組卷關係。`, "success");
+  } catch (error) {
+    setMessage(elements.jsonMessage, error.message, "error");
+  } finally {
+    elements.syncQuestionBankButton.disabled = false;
+  }
+}
+
+async function sheetAdminApi(event, payload = {}) {
+  const endpoint = configuredSheetEndpoint();
+  const adminToken = sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY) || "";
+  if (!endpoint) throw new Error("Google Sheet 尚未設定");
+  if (!adminToken) throw new Error("缺少管理權杖");
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "content-type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ event, adminToken, ...payload }),
+    redirect: "follow"
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.json();
+  if (!data.ok) throw new Error(data.error || "Google Sheet 管理查詢失敗");
+  return data;
+}
+
+function configuredSheetEndpoint() {
+  return String(window.QANDA_CONFIG?.googleAppsScriptUrl || "").trim();
+}
+
+function exportRemoteResults() {
+  const headers = ["sessionId", "questionnaireId", "questionnaireTitle", "personId", "displayName", "group", "status", "score", "maxScore", "percentage", "startedAt", "submittedAt", "lastSyncAt"];
+  const rows = state.remoteResults.map((row) => ({
+    sessionId: row.id,
+    questionnaireId: row.questionnaireId,
+    questionnaireTitle: row.questionnaireTitle,
+    personId: row.participant.personId,
+    displayName: row.participant.displayName,
+    group: row.participant.group,
+    status: row.status,
+    score: row.score,
+    maxScore: row.maxScore,
+    percentage: row.percentage,
+    startedAt: row.startedAt,
+    submittedAt: row.submittedAt,
+    lastSyncAt: row.lastSyncAt
+  }));
+  const csv = `\ufeff${headers.join(",")}\n${rows.map((row) => headers.map((header) => csvValue(row[header])).join(",")).join("\n")}\n`;
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "qanda-google-sheet-results.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function csvValue(value) {
+  const text = String(value ?? "");
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 function updateProgress() {

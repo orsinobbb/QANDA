@@ -1,5 +1,6 @@
 const QANDA_CONFIG = Object.freeze({
   spreadsheetProperty: "QANDA_SPREADSHEET_ID",
+  adminTokenHashProperty: "QANDA_ADMIN_TOKEN_SHA256",
   maxBodyChars: 400000,
   requireParticipantList: false,
   allowedSurveyIds: [
@@ -26,7 +27,16 @@ const SHEETS = Object.freeze({
     "comment", "aiJson", "receivedAt"
   ],
   AuditLog: ["receivedAt", "event", "sessionId", "questionnaireId", "personId", "outcome", "detail"],
-  Participants: ["personId", "displayName", "group", "enabled"]
+  Participants: ["personId", "displayName", "group", "enabled"],
+  QuestionBank: [
+    "bankItemId", "questionId", "sourceQuestionnaireId", "parentQuestionId", "type",
+    "competencyId", "title", "prompt", "optionsJson", "correctAnswerJson",
+    "gradingMode", "rubric", "maxScore", "difficulty", "tagsJson", "status",
+    "version", "updatedAt", "questionJson"
+  ],
+  QuestionnaireItems: [
+    "questionnaireId", "questionnaireVersion", "questionId", "position", "parentQuestionId", "addedAt"
+  ]
 });
 
 function setup() {
@@ -45,6 +55,13 @@ function setSpreadsheetId(spreadsheetId) {
   return { spreadsheetId: spreadsheet.getId(), spreadsheetUrl: spreadsheet.getUrl() };
 }
 
+function createAdminToken() {
+  const token = Utilities.getUuid().replace(/-/g, "") + Utilities.getUuid().replace(/-/g, "");
+  PropertiesService.getScriptProperties().setProperty(QANDA_CONFIG.adminTokenHashProperty, sha256_(token));
+  console.log("QANDA_ADMIN_TOKEN=" + token);
+  return token;
+}
+
 function doGet() {
   return json_({ ok: true, service: "QANDA Google Sheets receiver", at: new Date().toISOString() });
 }
@@ -56,6 +73,10 @@ function doPost(e) {
     const raw = e && e.postData ? String(e.postData.contents || "") : "";
     if (!raw || raw.length > QANDA_CONFIG.maxBodyChars) throw new Error("Invalid payload size");
     payload = JSON.parse(raw);
+    if (payload && /^admin\./.test(String(payload.event || ""))) {
+      verifyAdminToken_(payload.adminToken);
+      return json_(handleAdminRequest_(payload, receivedAt));
+    }
     validatePayload_(payload);
 
     const lock = LockService.getScriptLock();
@@ -91,6 +112,184 @@ function doPost(e) {
     }
     return json_({ ok: false, error: error.message || String(error), receivedAt: receivedAt });
   }
+}
+
+function handleAdminRequest_(payload, receivedAt) {
+  const spreadsheet = getSpreadsheet_();
+  ensureSheets_(spreadsheet);
+  let result;
+  if (payload.event === "admin.results.list") {
+    result = listResults_(spreadsheet, payload.filters || {});
+  } else if (payload.event === "admin.results.detail") {
+    result = readResultDetail_(spreadsheet, payload.sessionId);
+  } else if (payload.event === "admin.question-bank.list") {
+    result = listQuestionBank_(spreadsheet, payload.filters || {});
+  } else if (payload.event === "admin.question-bank.import") {
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) throw new Error("Question bank is busy; retry later");
+    try {
+      result = importQuestionnaire_(spreadsheet, payload.questionnaire);
+    } finally {
+      lock.releaseLock();
+    }
+  } else {
+    throw new Error("Unsupported admin event");
+  }
+  appendAudit_(spreadsheet, receivedAt, payload, "admin", payload.event);
+  return { ok: true, event: payload.event, data: result, receivedAt: receivedAt };
+}
+
+function verifyAdminToken_(token) {
+  const expected = PropertiesService.getScriptProperties().getProperty(QANDA_CONFIG.adminTokenHashProperty);
+  if (!expected) throw new Error("Run createAdminToken() before using the management API");
+  const actual = sha256_(String(token || ""));
+  if (!secureEqual_(actual, expected)) throw new Error("Invalid admin token");
+}
+
+function listResults_(spreadsheet, filters) {
+  const questionnaireId = String(filters.questionnaireId || "");
+  const status = String(filters.status || "");
+  const keyword = String(filters.keyword || "").trim().toLowerCase();
+  const limit = Math.min(500, Math.max(1, Number(filters.limit) || 200));
+  const rows = sheetObjects_(spreadsheet.getSheetByName("Results"))
+    .filter(function (row) { return !questionnaireId || String(row.questionnaireId) === questionnaireId; })
+    .filter(function (row) { return !status || String(row.status) === status; })
+    .filter(function (row) {
+      if (!keyword) return true;
+      return [row.sessionId, row.questionnaireTitle, row.personId, row.displayName, row.group, row.status]
+        .join(" ").toLowerCase().indexOf(keyword) !== -1;
+    })
+    .sort(function (a, b) { return String(b.receivedAt).localeCompare(String(a.receivedAt)); })
+    .slice(0, limit)
+    .map(resultSummary_);
+  return { results: rows, total: rows.length, source: "google-sheet" };
+}
+
+function readResultDetail_(spreadsheet, sessionId) {
+  if (!isSafeId_(sessionId)) throw new Error("Invalid session id");
+  const resultRow = sheetObjects_(spreadsheet.getSheetByName("Results")).find(function (row) {
+    return String(row.sessionId) === String(sessionId);
+  });
+  if (!resultRow) throw new Error("Result not found");
+  const competencies = sheetObjects_(spreadsheet.getSheetByName("Competencies")).filter(function (row) {
+    return String(row.sessionId) === String(sessionId);
+  });
+  const answers = sheetObjects_(spreadsheet.getSheetByName("Answers")).filter(function (row) {
+    return String(row.sessionId) === String(sessionId);
+  });
+  return { summary: resultSummary_(resultRow), competencies: competencies, answers: answers };
+}
+
+function resultSummary_(row) {
+  return {
+    id: String(row.sessionId || ""),
+    questionnaireId: String(row.questionnaireId || ""),
+    questionnaireTitle: String(row.questionnaireTitle || ""),
+    participant: {
+      personId: String(row.personId || ""),
+      displayName: String(row.displayName || row.personId || ""),
+      group: String(row.group || "")
+    },
+    status: String(row.status || ""),
+    startedAt: dateValue_(row.startedAt),
+    expiresAt: dateValue_(row.expiresAt),
+    submittedAt: dateValue_(row.submittedAt),
+    score: numberOrNull_(row.score),
+    maxScore: numberOrNull_(row.maxScore),
+    percentage: numberOrNull_(row.percentage),
+    proficiencyLabel: String(row.proficiencyLabel || ""),
+    recommendation: String(row.recommendation || ""),
+    answerCount: Number(row.answerCount || 0),
+    lastSyncAt: dateValue_(row.receivedAt)
+  };
+}
+
+function listQuestionBank_(spreadsheet, filters) {
+  const keyword = String(filters.keyword || "").trim().toLowerCase();
+  const limit = Math.min(500, Math.max(1, Number(filters.limit) || 200));
+  const items = sheetObjects_(spreadsheet.getSheetByName("QuestionBank"))
+    .filter(function (row) {
+      if (!keyword) return true;
+      return [row.questionId, row.title, row.prompt, row.competencyId, row.tagsJson]
+        .join(" ").toLowerCase().indexOf(keyword) !== -1;
+    })
+    .slice(0, limit);
+  return { items: items, total: items.length, source: "google-sheet" };
+}
+
+function importQuestionnaire_(spreadsheet, questionnaire) {
+  if (!questionnaire || !isSafeId_(questionnaire.id)) throw new Error("Invalid questionnaire");
+  const version = Number(questionnaire.lifecycle && questionnaire.lifecycle.version) || 1;
+  const at = new Date().toISOString();
+  const questions = flattenQuestionnaire_(questionnaire.questions || []);
+  const bankSheet = spreadsheet.getSheetByName("QuestionBank");
+  const itemSheet = spreadsheet.getSheetByName("QuestionnaireItems");
+  const bankKeys = new Set(sheetObjects_(bankSheet).map(function (row) { return String(row.bankItemId); }));
+  const itemKeys = new Set(sheetObjects_(itemSheet).map(function (row) {
+    return [row.questionnaireId, row.questionnaireVersion, row.questionId].join(":");
+  }));
+  const bankRows = [];
+  const itemRows = [];
+  questions.forEach(function (entry, index) {
+    const question = entry.question;
+    const bankItemId = [questionnaire.id, question.id, version].join(":");
+    if (!bankKeys.has(bankItemId)) {
+      bankRows.push([
+        safeCell_(bankItemId), safeCell_(question.id), safeCell_(questionnaire.id),
+        safeCell_(entry.parentQuestionId), safeCell_(question.type), safeCell_(question.competency),
+        safeCell_(question.title), safeCell_(question.prompt), safeJson_(question.options || []),
+        safeJson_(question.correctAnswer), safeCell_(question.gradingMode || "fixed"),
+        safeCell_(question.rubric), number_(question.maxScore), safeCell_(question.difficulty),
+        safeJson_(question.tags || []), "active", version, at, safeJson_(question)
+      ]);
+    }
+    const itemKey = [questionnaire.id, version, question.id].join(":");
+    if (!itemKeys.has(itemKey)) {
+      itemRows.push([safeCell_(questionnaire.id), version, safeCell_(question.id), index + 1, safeCell_(entry.parentQuestionId), at]);
+    }
+  });
+  appendRows_(bankSheet, bankRows);
+  appendRows_(itemSheet, itemRows);
+  return { questionnaireId: questionnaire.id, version: version, importedQuestions: bankRows.length, linkedItems: itemRows.length };
+}
+
+function flattenQuestionnaire_(questions, parentQuestionId) {
+  return questions.reduce(function (all, question) {
+    all.push({ question: question, parentQuestionId: parentQuestionId || "" });
+    if (question.questions && question.questions.length) {
+      all = all.concat(flattenQuestionnaire_(question.questions, question.id));
+    }
+    return all;
+  }, []);
+}
+
+function sheetObjects_(sheet) {
+  const values = sheet.getDataRange().getValues();
+  if (values.length < 2) return [];
+  const headers = values[0].map(String);
+  return values.slice(1).filter(function (row) { return row.some(function (cell) { return cell !== ""; }); }).map(function (row) {
+    return headers.reduce(function (object, header, index) {
+      object[header] = row[index];
+      return object;
+    }, {});
+  });
+}
+
+function dateValue_(value) {
+  return value instanceof Date ? value.toISOString() : String(value || "");
+}
+
+function numberOrNull_(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function secureEqual_(left, right) {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  return difference === 0;
 }
 
 function validatePayload_(payload) {

@@ -185,6 +185,7 @@
             <textarea id="jsonEditor" spellcheck="false"></textarea>
             <div class="admin-actions">
               <button id="reloadJsonButton" type="button">重新載入</button>
+              <button id="syncQuestionBankButton" type="button">同步至題庫</button>
               <button id="saveJsonButton" class="primary" type="button">儲存問卷</button>
             </div>
             <div id="jsonMessage" class="message"></div>
@@ -215,6 +216,15 @@
             <div class="panel-title">
               <span>結果搜尋</span>
               <button id="exportButton" type="button">匯出 CSV</button>
+            </div>
+            <div class="sheet-admin-connect">
+              <label>
+                管理權杖
+                <input id="sheetAdminTokenInput" type="password" autocomplete="off" placeholder="只保留於目前分頁" />
+              </label>
+              <button id="connectSheetButton" type="button">連線 Google Sheet</button>
+              <button id="disconnectSheetButton" type="button">中斷</button>
+              <span id="resultSourceStatus" class="source-status">目前顯示本機結果</span>
             </div>
             <div class="filters">
               <select id="resultQuestionnaireFilter"></select>

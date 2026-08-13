@@ -80,11 +80,18 @@ npm run build:pages
 1. 建立 Google Sheet，開啟「擴充功能 → Apps Script」。
 2. 將 `apps-script/Code.gs` 與 `apps-script/appsscript.json` 貼入專案。
 3. 在 Apps Script 編輯器執行一次 `setup()` 並授權。
-4. 選擇「部署 → 新增部署作業 → 網頁應用程式」，執行身分選「我」，存取權選「所有人」。
-5. 將部署後的 `/exec` 網址填入 `public/integrations.js` 的 `googleAppsScriptUrl`。
-6. 執行 `npm run build:pages`，提交並推送 GitHub Pages。
+4. 執行一次 `createAdminToken()`，立即保存執行紀錄中的權杖；程式只保存其雜湊，之後無法找回原文。
+5. 選擇「部署 → 新增部署作業 → 網頁應用程式」，執行身分選「我」，存取權選「所有人」。
+6. 將部署後的 `/exec` 網址填入 `public/integrations.js` 的 `googleAppsScriptUrl`。
+7. 執行 `npm run build:pages`，提交並推送 GitHub Pages。
 
-系統會建立 `Results`、`Competencies`、`Answers`、`AuditLog` 與 `Participants` 工作表。接收端包含問卷白名單、欄位驗證、`sessionId` 防重、寫入鎖定與公式注入防護。若要只接受名單內的人員，先填寫 `Participants`，再把 `Code.gs` 的 `requireParticipantList` 改成 `true`。
+系統會建立 `Results`、`Competencies`、`Answers`、`AuditLog`、`Participants`、`QuestionBank` 與 `QuestionnaireItems` 工作表。`QuestionBank` 保存題目內容、答案、評分方式與版本；`QuestionnaireItems` 保存題目屬於哪份問卷及其順序，讓同一題可被不同考卷重複使用。
+
+在管理介面的「結果搜尋與匯出」輸入管理權杖後，可以查詢集中結果與匯出 CSV；權杖只保存在目前分頁的 `sessionStorage`，不會寫入 GitHub。連線後可在 JSON 編輯區使用「同步至題庫」，匯入目前問卷及複合題子題，重複同步不會重複建題。
+
+更新既有 Apps Script 時，貼上新版 `Code.gs`、再次執行 `setup()`，再到「部署 → 管理部署作業 → 編輯 → 新版本」即可保留原本的 `/exec` 網址。若尚未建立管理權杖，再執行 `createAdminToken()`。
+
+接收端包含問卷白名單、管理 API 權杖、欄位驗證、`sessionId` 防重、寫入鎖定與公式注入防護。若要只接受名單內的人員，先填寫 `Participants`，再把 `Code.gs` 的 `requireParticipantList` 改成 `true`。
 
 這是班級試行方案，不是強身份驗證。公開 Apps Script 端點仍可能被偽造呼叫；正式考試應改用登入、伺服器端計時與不可公開的答案資料庫。
 
