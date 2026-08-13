@@ -77,12 +77,17 @@
     },
     {
       "id": "i_q4",
-      "type": "short",
+      "type": "single",
       "title": "並行更新控制",
-      "prompt": "以 version 欄位比對更新前後版本、衝突時拒絕寫入的機制稱為什麼鎖？",
+      "prompt": "後端以 version 欄位比對更新前後版本，若版本不一致就拒絕寫入。這是哪一種並行控制機制？",
       "competency": "data",
-      "acceptedAnswers": ["樂觀鎖", "乐观锁", "optimistic lock", "optimistic locking"],
-      "matchMode": "contains",
+      "options": [
+        { "value": "optimistic", "label": "樂觀鎖（Optimistic locking）" },
+        { "value": "pessimistic", "label": "悲觀鎖（Pessimistic locking）" },
+        { "value": "distributed", "label": "分散式鎖（Distributed lock）" },
+        { "value": "table", "label": "資料表鎖（Table lock）" }
+      ],
+      "correctAnswer": "optimistic",
       "maxScore": 8
     },
     {
@@ -122,12 +127,19 @@
         },
         {
           "id": "i_q5c",
-          "type": "short",
+          "type": "multiple",
           "title": "修復與驗證計畫",
-          "prompt": "請用 4 至 8 句提出修復順序，並說明如何用測試證明不再重複扣款。",
+          "prompt": "修復重複扣款問題並驗證改善成效時，哪些工作不可省略？",
           "competency": "reliability",
-          "gradingMode": "ai",
-          "rubric": "滿分需涵蓋：重現與界定影響、冪等鍵、資料庫唯一約束或交易、可控重試、併發或整合測試、既有重複資料處理、監控驗證。應重視順序與可驗證性。",
+          "options": [
+            { "value": "scope", "label": "先重現問題、界定受影響交易並處理既有重複資料" },
+            { "value": "guards", "label": "加入冪等鍵、唯一約束或交易等防重機制" },
+            { "value": "tests", "label": "執行併發與整合測試，證明相同請求只產生一次扣款" },
+            { "value": "monitor", "label": "上線後監控重複交易、錯誤率與補償處理結果" },
+            { "value": "timeout", "label": "只把逾時時間加長，不改變交易保護" },
+            { "value": "manual", "label": "只請客服人工檢查，略過自動化測試" }
+          ],
+          "correctAnswer": ["scope", "guards", "tests", "monitor"],
           "maxScore": 18
         }
       ]

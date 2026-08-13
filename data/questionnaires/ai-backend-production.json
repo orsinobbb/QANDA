@@ -77,12 +77,17 @@
     },
     {
       "id": "p_q4",
-      "type": "short",
+      "type": "single",
       "title": "機密輪替",
       "prompt": "發現 API key 已被提交到公開 Git 儲存庫時，第一個必須執行的安全動作是什麼？",
       "competency": "security",
-      "acceptedAnswers": ["撤銷", "停用", "輪替", "作廢", "revoke", "rotate"],
-      "matchMode": "contains",
+      "options": [
+        { "value": "revoke", "label": "立即撤銷或輪替外洩金鑰，再調查使用紀錄" },
+        { "value": "delete", "label": "只刪除 Git 中出現金鑰的檔案" },
+        { "value": "private", "label": "把儲存庫改成私人，但繼續使用原金鑰" },
+        { "value": "rename", "label": "重新命名金鑰變數，避免被搜尋到" }
+      ],
+      "correctAnswer": "revoke",
       "maxScore": 8
     },
     {
@@ -122,12 +127,19 @@
         },
         {
           "id": "p_q5c",
-          "type": "short",
+          "type": "multiple",
           "title": "事故應變與復盤",
-          "prompt": "請用 5 至 10 句說明從止血、定位到恢復服務與事後改善的完整流程，並指出 AI 在其中可以與不可以替人決定的事項。",
+          "prompt": "處理這次上線事故時，哪些做法同時符合事故應變與 AI 治理原則？",
           "competency": "ai-governance",
-          "gradingMode": "ai",
-          "rubric": "滿分需涵蓋：確認影響與指揮角色、回滾或隔離止血、保留證據並以指標日誌追蹤定位、驗證恢復、通知利害關係人、無責復盤與追蹤項目；AI 可協助整理證據、提出假設與草擬修復，但風險判斷、上線決策與責任仍由人員承擔。",
+          "options": [
+            { "value": "contain", "label": "確認影響與指揮角色，依程序回滾或隔離止血" },
+            { "value": "evidence", "label": "保留部署、指標、日誌與處置紀錄，建立事故時間線" },
+            { "value": "recover", "label": "驗證服務恢復、通知利害關係人並追蹤改善項目" },
+            { "value": "ai-assist", "label": "讓 AI 協助整理證據、提出假設與草擬修復方案" },
+            { "value": "ai-decide", "label": "由 AI 自行決定是否回滾與何時重新上線" },
+            { "value": "erase", "label": "事故結束後刪除 AI 對話與操作紀錄以避免究責" }
+          ],
+          "correctAnswer": ["contain", "evidence", "recover", "ai-assist"],
           "maxScore": 18
         }
       ]
