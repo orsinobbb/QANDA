@@ -73,6 +73,21 @@ npm run build:pages
 
 產物會輸出到 `dist/`。repo 內已包含 `.github/workflows/pages.yml`，推到 GitHub 後可在 repository 的 Pages 設定中選擇 GitHub Actions 部署。
 
+## Google Sheet 集中收件
+
+`apps-script/Code.gs` 可將 GitHub Pages 上正式送出的結果集中寫入一份私有 Google Sheet：
+
+1. 建立 Google Sheet，開啟「擴充功能 → Apps Script」。
+2. 將 `apps-script/Code.gs` 與 `apps-script/appsscript.json` 貼入專案。
+3. 在 Apps Script 編輯器執行一次 `setup()` 並授權。
+4. 選擇「部署 → 新增部署作業 → 網頁應用程式」，執行身分選「我」，存取權選「所有人」。
+5. 將部署後的 `/exec` 網址填入 `public/integrations.js` 的 `googleAppsScriptUrl`。
+6. 執行 `npm run build:pages`，提交並推送 GitHub Pages。
+
+系統會建立 `Results`、`Competencies`、`Answers`、`AuditLog` 與 `Participants` 工作表。接收端包含問卷白名單、欄位驗證、`sessionId` 防重、寫入鎖定與公式注入防護。若要只接受名單內的人員，先填寫 `Participants`，再把 `Code.gs` 的 `requireParticipantList` 改成 `true`。
+
+這是班級試行方案，不是強身份驗證。公開 Apps Script 端點仍可能被偽造呼叫；正式考試應改用登入、伺服器端計時與不可公開的答案資料庫。
+
 ## Lovable
 
 Lovable 通常透過 GitHub 連接專案。建議先把本 repo 推到 GitHub，再到 Lovable 連接 GitHub repository。若要保留 Node API，請確認 Lovable 專案部署方案能支援後端，或把資料層改接 Supabase 等雲端後端。

@@ -516,13 +516,53 @@ async function submitAnswers() {
     });
     loadSessionData(data);
     clearLocalDraft();
-    setSyncStatus("已正式提交");
+    const sheetSync = await syncSubmittedResult(data);
+    setSyncStatus(sheetSync);
     await loadResults();
   } catch (error) {
     setSyncStatus(error.message);
     elements.submitButton.disabled = false;
   } finally {
     elements.confirmSubmitButton.disabled = false;
+  }
+}
+
+async function syncSubmittedResult(data) {
+  const endpoint = String(window.QANDA_CONFIG?.googleAppsScriptUrl || "").trim();
+  if (!endpoint) return "已正式提交；Google Sheet 尚未設定";
+  const payload = {
+    event: "result.submitted",
+    schemaVersion: 1,
+    source: window.location.origin,
+    sentAt: new Date().toISOString(),
+    session: data.session,
+    questionnaire: {
+      id: data.questionnaire.id,
+      title: data.questionnaire.title
+    },
+    answers: data.session.answers || {},
+    result: data.session.result,
+    aiLogs: data.session.aiLogs || []
+  };
+  const request = {
+    method: "POST",
+    headers: { "content-type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload),
+    redirect: "follow"
+  };
+  try {
+    const response = await fetch(endpoint, request);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const result = await response.json();
+    if (!result.ok) throw new Error(result.error || "Google Sheet 拒絕寫入");
+    return result.duplicate ? "已正式提交；Google Sheet 已有此結果" : "已正式提交並同步 Google Sheet";
+  } catch (error) {
+    try {
+      await fetch(endpoint, { ...request, mode: "no-cors" });
+      return "已正式提交；Google Sheet 同步已送出待確認";
+    } catch (_) {
+      return `已正式提交；Google Sheet 同步失敗：${error.message}`;
+    }
   }
 }
 

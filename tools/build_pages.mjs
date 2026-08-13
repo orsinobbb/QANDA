@@ -45,8 +45,8 @@ async function patchIndex() {
   let html = await fs.readFile(indexPath, "utf8");
   html = html
     .replace('href="/styles.css"', 'href="./styles.css"')
+    .replace('src="/integrations.js"', 'src="./integrations.js"')
     .replace('src="/app.js"', 'src="./app.js"')
     .replace('<script type="module" src="./app.js"></script>', '<script src="./static-api.js"></script>\n    <script type="module" src="./app.js"></script>');
   await fs.writeFile(indexPath, html, "utf8");
 }
-
