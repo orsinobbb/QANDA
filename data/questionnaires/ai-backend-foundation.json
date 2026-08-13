@@ -54,8 +54,7 @@
       "options": [
         { "value": "client-error", "label": "回傳 4xx，並提供可定位欄位的錯誤資訊" },
         { "value": "server-error", "label": "一律回傳 500，避免透露細節" },
-        { "value": "success", "label": "回傳 200，再把錯誤寫入伺服器日誌" },
-        { "value": "other", "label": "其它", "allowText": true, "textPlaceholder": "請說明處理方式" }
+        { "value": "success", "label": "回傳 200，再把錯誤寫入伺服器日誌" }
       ],
       "correctAnswer": "client-error",
       "maxScore": 8
@@ -77,12 +76,17 @@
     },
     {
       "id": "f_q4",
-      "type": "short",
+      "type": "single",
       "title": "重複請求安全性",
       "prompt": "同一個建立訂單請求重送多次仍只產生一筆訂單，這項特性稱為什麼？",
       "competency": "api",
-      "acceptedAnswers": ["冪等", "幂等", "idempotency", "idempotent"],
-      "matchMode": "contains",
+      "options": [
+        { "value": "idempotency", "label": "冪等性（Idempotency）" },
+        { "value": "availability", "label": "可用性（Availability）" },
+        { "value": "serialization", "label": "序列化（Serialization）" },
+        { "value": "replication", "label": "資料複寫（Replication）" }
+      ],
+      "correctAnswer": "idempotency",
       "maxScore": 10
     },
     {
@@ -147,12 +151,19 @@
     },
     {
       "id": "f_q8",
-      "type": "short",
+      "type": "multiple",
       "title": "AI 協作閉環",
-      "prompt": "請用 3 至 6 句說明：你會如何把一項後端需求交給 AI，並驗證產出可以合併？",
+      "prompt": "要把後端需求交給 AI 並確認產出可以合併，以下哪些步驟是必要的？",
       "competency": "ai-collaboration",
-      "gradingMode": "ai",
-      "rubric": "滿分回答需包含：釐清需求與驗收條件、提供既有程式上下文、限制變更範圍、檢視 diff、執行測試或重現案例、由人員承擔最終判斷。缺少一個核心步驟應酌量扣分。",
+      "options": [
+        { "value": "acceptance", "label": "先釐清需求、驗收條件與失敗情境" },
+        { "value": "context", "label": "提供既有程式、架構與限制條件" },
+        { "value": "scope", "label": "限制變更範圍並要求可檢視的差異" },
+        { "value": "verify", "label": "檢視 diff 並執行測試或重現案例" },
+        { "value": "human", "label": "由人員確認風險並做最終合併判斷" },
+        { "value": "direct", "label": "AI 產出後直接合併，不需再驗證" }
+      ],
+      "correctAnswer": ["acceptance", "context", "scope", "verify", "human"],
       "maxScore": 20
     }
   ]
