@@ -38,8 +38,8 @@ const elements = {
   questionnaireSelect: $("#questionnaireSelect"),
   adminQuestionnaireSelect: $("#adminQuestionnaireSelect"),
   resultQuestionnaireFilter: $("#resultQuestionnaireFilter"),
-  personIdInput: $("#personIdInput"),
-  serialInput: $("#serialInput"),
+  displayNameInput: $("#displayNameInput"),
+  groupInput: $("#groupInput"),
   startButton: $("#startButton"),
   accessMessage: $("#accessMessage"),
   sidebarParticipant: $("#sidebarParticipant"),
@@ -265,14 +265,14 @@ function renderSurveyPreview() {
 }
 
 async function startSession() {
-  setMessage(elements.accessMessage, "驗證中");
+  setMessage(elements.accessMessage, "準備考卷中");
   elements.startButton.disabled = true;
-  elements.startButton.textContent = "正在驗證";
+  elements.startButton.textContent = "準備中";
   try {
     const payload = {
       questionnaireId: elements.questionnaireSelect.value,
-      personId: elements.personIdInput.value.trim(),
-      serial: elements.serialInput.value.trim()
+      displayName: elements.displayNameInput.value.trim(),
+      group: elements.groupInput.value.trim()
     };
     const data = await api("/api/sessions/start", { method: "POST", body: payload });
     loadSessionData(data);
@@ -281,7 +281,7 @@ async function startSession() {
     setMessage(elements.accessMessage, error.message, "error");
   } finally {
     elements.startButton.disabled = false;
-    elements.startButton.textContent = "驗證並開始作答";
+    elements.startButton.textContent = "開始作答";
   }
 }
 

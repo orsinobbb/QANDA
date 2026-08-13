@@ -239,19 +239,24 @@ async function requireSession(id) {
 }
 
 function resolveParticipant(survey, body) {
-  const roster = Array.isArray(survey.accessRoster) ? survey.accessRoster : [];
-  if (!body.personId) throw httpError(400, "personId is required");
-  if (!roster.length) {
-    return {
-      personId: body.personId,
-      displayName: body.displayName || body.personId,
-      serial: body.serial || "",
-      group: body.group || ""
-    };
+  const displayName = String(body.displayName || "").trim();
+  const group = String(body.group || "").trim();
+  if (!displayName) throw httpError(400, "請輸入姓名。");
+  return {
+    personId: createParticipantId(displayName, group),
+    displayName,
+    group
+  };
+}
+
+function createParticipantId(displayName, group) {
+  const source = `${displayName.trim().toLocaleLowerCase()}|${group.trim().toLocaleLowerCase()}`;
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
   }
-  const participant = roster.find((item) => item.personId === body.personId && item.serial === body.serial);
-  if (!participant) throw httpError(403, "人員代號或序號不符合此問卷。");
-  return participant;
+  return `learner-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
 async function findReusableSession(questionnaireId, personId) {

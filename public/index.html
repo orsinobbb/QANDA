@@ -48,8 +48,8 @@
               <span>輸入後先保存在本機，再同步至後端。</span>
             </div>
             <div>
-              <strong>驗證後才開始計時</strong>
-              <span>尚未通過身份驗證前，不會消耗作答時間。</span>
+              <strong>按下開始才開始計時</strong>
+              <span>填寫姓名與選擇考卷時，不會消耗作答時間。</span>
             </div>
             <div>
               <strong>提交前可完整檢查</strong>
@@ -61,7 +61,7 @@
             <div class="panel-title">
               <div>
                 <small class="step-indicator">步驟 1 / 3</small>
-                <span>確認身份</span>
+                <span>填寫作答資料</span>
               </div>
               <small id="healthStatus" class="connection-status">檢查中</small>
             </div>
@@ -71,15 +71,15 @@
             </label>
             <p id="directLinkHint" class="direct-link-hint hidden">此作答連結已指定卷別。</p>
             <label>
-              人員代號
-              <input id="personIdInput" value="A001" autocomplete="username" />
+              姓名
+              <input id="displayNameInput" autocomplete="name" placeholder="請輸入姓名" />
             </label>
             <label>
-              序號
-              <input id="serialInput" value="STAR-2026" autocomplete="one-time-code" />
+              班級（選填）
+              <input id="groupInput" autocomplete="organization" placeholder="例如：AI 協作後端 A 班" />
             </label>
-            <button id="startButton" class="primary start-button" type="button">驗證並開始作答</button>
-            <p class="start-note">驗證成功後將立即開始倒數。</p>
+            <button id="startButton" class="primary start-button" type="button">開始作答</button>
+            <p class="start-note">按下開始後將立即倒數。</p>
             <div id="accessMessage" class="message" role="status" aria-live="polite"></div>
           </aside>
         </div>
