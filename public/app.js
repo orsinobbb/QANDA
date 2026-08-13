@@ -15,12 +15,19 @@ const state = {
 };
 
 const SHEET_ADMIN_TOKEN_KEY = "qanda:sheet-admin-token";
+const ADMIN_MODE = new URLSearchParams(window.location.search).get("admin") === "1";
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 const elements = {
   preflightStage: $("#preflightStage"),
+  viewSwitcher: $("#viewSwitcher"),
+  adminGate: $("#adminGate"),
+  adminGateToken: $("#adminGateToken"),
+  adminGateButton: $("#adminGateButton"),
+  adminGateMessage: $("#adminGateMessage"),
+  adminWorkspace: $("#adminWorkspace"),
   activeStage: $("#activeStage"),
   previewTitle: $("#previewTitle"),
   previewDescription: $("#previewDescription"),
@@ -68,6 +75,11 @@ const elements = {
   publishCentralButton: $("#publishCentralButton"),
   closeCentralButton: $("#closeCentralButton"),
   saveJsonButton: $("#saveJsonButton"),
+  publishResult: $("#publishResult"),
+  publishResultTitle: $("#publishResultTitle"),
+  publishResultLink: $("#publishResultLink"),
+  copyPublishLinkButton: $("#copyPublishLinkButton"),
+  openPublishLinkButton: $("#openPublishLinkButton"),
   lifecycleTitle: $("#lifecycleTitle"),
   lifecycleStatus: $("#lifecycleStatus"),
   lifecycleVersion: $("#lifecycleVersion"),
@@ -99,6 +111,8 @@ const elements = {
   dashboardEmpty: $("#dashboardEmpty"),
   dashboardContent: $("#dashboardContent"),
   dashboardKpis: $("#dashboardKpis"),
+  dashboardInsight: $("#dashboardInsight"),
+  dashboardUpdatedAt: $("#dashboardUpdatedAt"),
   dashboardQuestionnaires: $("#dashboardQuestionnaires"),
   dashboardCompetencies: $("#dashboardCompetencies"),
   dashboardQuestions: $("#dashboardQuestions"),
@@ -108,12 +122,21 @@ const elements = {
 init();
 
 async function init() {
+  configureAppMode();
   bindEvents();
-  elements.sheetAdminTokenInput.value = sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY) || "";
-  await Promise.all([checkHealth(), loadQuestionnaires()]);
-  await loadAdminSurvey();
-  await loadResults();
-  await loadDashboard();
+  const savedToken = sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY) || "";
+  elements.sheetAdminTokenInput.value = savedToken;
+  elements.adminGateToken.value = savedToken;
+  await checkHealth();
+  if (ADMIN_MODE && savedToken) await unlockAdmin(savedToken);
+  if (!ADMIN_MODE) await loadQuestionnaires();
+}
+
+function configureAppMode() {
+  document.body.classList.toggle("admin-mode", ADMIN_MODE);
+  elements.viewSwitcher.classList.add("hidden");
+  $(".eyebrow").textContent = ADMIN_MODE ? "QANDA MANAGEMENT" : "JSON Questionnaire System";
+  showView(ADMIN_MODE ? "admin" : "answer");
 }
 
 function bindEvents() {
@@ -121,6 +144,10 @@ function bindEvents() {
     button.addEventListener("click", () => showView(button.dataset.view));
   });
   elements.questionnaireSelect.addEventListener("change", handleSurveySelection);
+  elements.adminGateButton.addEventListener("click", () => unlockAdmin(elements.adminGateToken.value.trim()));
+  elements.adminGateToken.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") unlockAdmin(elements.adminGateToken.value.trim());
+  });
   elements.startButton.addEventListener("click", startSession);
   elements.questionForm.addEventListener("input", handleAnswerInput);
   elements.questionNav.addEventListener("click", handleQuestionNavigation);
@@ -134,6 +161,8 @@ function bindEvents() {
   elements.saveJsonButton.addEventListener("click", saveAdminSurvey);
   elements.syncQuestionBankButton.addEventListener("click", syncQuestionBank);
   elements.publishCentralButton.addEventListener("click", publishCentralQuestionnaire);
+  elements.copyPublishLinkButton.addEventListener("click", () => copyText(elements.publishResultLink.value, elements.jsonMessage));
+  elements.openPublishLinkButton.addEventListener("click", () => window.open(elements.publishResultLink.value, "_blank", "noopener"));
   elements.closeCentralButton.addEventListener("click", closeCentralQuestionnaire);
   elements.lifecycleActions.addEventListener("click", handleLifecycleAction);
   elements.copyShareLinkButton.addEventListener("click", copyShareLink);
@@ -144,6 +173,32 @@ function bindEvents() {
   elements.connectSheetButton.addEventListener("click", connectSheetAdmin);
   elements.disconnectSheetButton.addEventListener("click", disconnectSheetAdmin);
   elements.refreshDashboardButton.addEventListener("click", loadDashboard);
+}
+
+async function unlockAdmin(token) {
+  if (!token) {
+    setMessage(elements.adminGateMessage, "請輸入管理權杖。", "error");
+    return;
+  }
+  elements.adminGateButton.disabled = true;
+  setMessage(elements.adminGateMessage, "正在驗證管理權限");
+  sessionStorage.setItem(SHEET_ADMIN_TOKEN_KEY, token);
+  try {
+    const response = await sheetAdminApi("admin.dashboard", { filters: {} });
+    elements.sheetAdminTokenInput.value = token;
+    elements.adminGate.classList.add("hidden");
+    elements.adminWorkspace.classList.remove("hidden");
+    await loadQuestionnaires();
+    await Promise.all([loadAdminSurvey(), loadResults()]);
+    renderDashboard(response.data);
+  } catch (error) {
+    sessionStorage.removeItem(SHEET_ADMIN_TOKEN_KEY);
+    elements.adminWorkspace.classList.add("hidden");
+    elements.adminGate.classList.remove("hidden");
+    setMessage(elements.adminGateMessage, `無法進入：${error.message}`, "error");
+  } finally {
+    elements.adminGateButton.disabled = false;
+  }
 }
 
 function showView(view) {
@@ -165,10 +220,8 @@ async function checkHealth() {
 async function loadQuestionnaires(preferredAdminId = "") {
   const previousSurveyId = elements.questionnaireSelect.value;
   const previousAdminId = preferredAdminId || elements.adminQuestionnaireSelect.value;
-  const [publicData, adminData] = await Promise.all([
-    api("/api/questionnaires"),
-    api("/api/questionnaires?scope=admin")
-  ]);
+  const publicData = await api("/api/questionnaires");
+  const adminData = ADMIN_MODE ? await api("/api/questionnaires?scope=admin") : { questionnaires: [] };
   state.questionnaires = publicData.questionnaires || [];
   state.adminQuestionnaires = adminData.questionnaires || [];
   fillSelect(elements.questionnaireSelect, state.questionnaires);
@@ -862,6 +915,26 @@ function buildShareUrl(questionnaireId) {
   return url.toString();
 }
 
+function showPublishedLink(questionnaire, version) {
+  const link = buildShareUrl(questionnaire.id);
+  elements.publishResultTitle.textContent = `${questionnaire.title} · 第 ${version} 版`;
+  elements.publishResultLink.value = link;
+  elements.publishResult.classList.remove("hidden");
+  elements.publishResult.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+async function copyText(value, messageElement) {
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    const input = elements.publishResultLink;
+    input.select();
+    document.execCommand("copy");
+  }
+  setMessage(messageElement, "學員作答連結已複製。", "success");
+}
+
 async function copyShareLink() {
   if (!elements.shareLinkInput.value) return;
   try {
@@ -1007,7 +1080,10 @@ async function connectSheetAdmin() {
 async function disconnectSheetAdmin() {
   sessionStorage.removeItem(SHEET_ADMIN_TOKEN_KEY);
   elements.sheetAdminTokenInput.value = "";
-  await Promise.all([loadResults(), loadDashboard()]);
+  elements.adminGateToken.value = "";
+  elements.adminWorkspace.classList.add("hidden");
+  elements.adminGate.classList.remove("hidden");
+  setMessage(elements.adminGateMessage, "已中斷管理連線。", "success");
 }
 
 async function syncQuestionBank() {
@@ -1050,8 +1126,9 @@ async function publishCentralQuestionnaire() {
     });
     const release = response.data;
     const action = release.reused ? "內容未變更，維持" : "已建立";
-    setMessage(elements.jsonMessage, `${action}第 ${release.version} 版；學員連結已可使用。`, "success");
+    setMessage(elements.jsonMessage, `${action}第 ${release.version} 版。`, "success");
     elements.shareLinkInput.value = buildShareUrl(questionnaire.id);
+    showPublishedLink(questionnaire, release.version);
   } catch (error) {
     setMessage(elements.jsonMessage, error.message, "error");
   } finally {
@@ -1103,18 +1180,48 @@ async function loadDashboard() {
 
 function renderDashboard(data) {
   const summary = data.summary || {};
-  elements.dashboardKpis.innerHTML = [
-    ["完成份數", summary.submissions || 0],
-    ["作答人數", summary.participants || 0],
-    ["平均成績", `${summary.averagePercentage || 0}%`],
-    ["通過率", `${summary.passRate || 0}%`]
-  ].map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
-  elements.dashboardQuestionnaires.innerHTML = metricRows(data.questionnaires, "averagePercentage", (item) => `${item.submissions} 份 · 通過 ${item.passRate}%`);
+  const kpis = [
+    ["完成份數", summary.submissions || 0, "neutral"],
+    ["作答人數", summary.participants || 0, "neutral"],
+    ["平均成績", `${summary.averagePercentage || 0}%`, scoreTone(summary.averagePercentage)],
+    ["通過率", `${summary.passRate || 0}%`, scoreTone(summary.passRate)]
+  ];
+  elements.dashboardKpis.innerHTML = kpis.map(([label, value, tone]) => `<div class="kpi-${tone}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><i></i></div>`).join("");
+  elements.dashboardInsight.textContent = dashboardInsight(summary, data);
+  elements.dashboardUpdatedAt.textContent = data.generatedAt ? `更新 ${formatTime(data.generatedAt)}` : "";
+  elements.dashboardQuestionnaires.innerHTML = comparisonRows(data.questionnaires);
   elements.dashboardCompetencies.innerHTML = metricRows(data.competencies, "percentage", (item) => item.percentage < 60 ? "優先補強" : `${item.attempts} 次評量`);
-  elements.dashboardQuestions.innerHTML = rankRows(data.questions, (item) => `${item.percentage}% · ${item.attempts} 人作答`);
-  elements.dashboardParticipants.innerHTML = rankRows(data.participants, (item) => `${item.completed} 份 · 平均 ${item.averagePercentage}%${item.group ? ` · ${item.group}` : ""}`);
+  elements.dashboardQuestions.innerHTML = riskRows(data.questions);
+  elements.dashboardParticipants.innerHTML = participantRows(data.participants);
   elements.dashboardEmpty.classList.add("hidden");
   elements.dashboardContent.classList.remove("hidden");
+}
+
+function scoreTone(value) {
+  const score = Number(value || 0);
+  if (score >= 70) return "good";
+  if (score >= 60) return "watch";
+  return "risk";
+}
+
+function dashboardInsight(summary, data) {
+  if (!summary.submissions) return "尚無完成作答，發布連結後等待第一筆結果。";
+  const weakest = [...(data.competencies || [])].sort((a, b) => a.percentage - b.percentage)[0];
+  if (Number(summary.passRate) < 60) return `通過率偏低${weakest ? `，先補強「${weakest.label}」` : "，建議安排補救教學"}。`;
+  if (weakest && Number(weakest.percentage) < 70) return `整體表現可用，但「${weakest.label}」仍低於達標線。`;
+  return "整體已達標，可針對弱題進行精準複習。";
+}
+
+function comparisonRows(items = []) {
+  if (!items.length) return '<div class="dashboard-no-data">尚無資料</div>';
+  return items.map((item) => {
+    const percentage = Math.max(0, Math.min(100, Number(item.averagePercentage || 0)));
+    return `<div class="comparison-row">
+      <div><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(`${item.submissions} 份完成 · ${item.passRate}% 通過`)}</span></div>
+      <div class="comparison-track"><i class="target-line"></i><b class="tone-${scoreTone(percentage)}" style="width:${percentage}%"></b></div>
+      <strong>${escapeHtml(`${percentage}%`)}</strong>
+    </div>`;
+  }).join("");
 }
 
 function metricRows(items = [], percentageKey, detail) {
@@ -1134,6 +1241,27 @@ function rankRows(items = [], detail) {
   return items.slice(0, 10).map((item, index) => `<div class="rank-row">
     <span>${index + 1}</span><div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(detail(item))}</small></div>
   </div>`).join("");
+}
+
+function riskRows(items = []) {
+  if (!items.length) return '<div class="dashboard-no-data">尚無資料</div>';
+  return items.slice(0, 10).map((item, index) => `<div class="risk-row">
+    <span class="risk-score tone-${scoreTone(item.percentage)}">${escapeHtml(`${item.percentage}%`)}</span>
+    <div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(`第 ${item.version || 1} 版 · ${item.attempts} 人作答`)}</small></div>
+    <b>${index < 3 && Number(item.percentage) < 70 ? "優先" : "追蹤"}</b>
+  </div>`).join("");
+}
+
+function participantRows(items = []) {
+  if (!items.length) return '<div class="dashboard-no-data">尚無資料</div>';
+  return items.slice(0, 20).map((item) => {
+    const completed = Math.min(3, Number(item.completed || 0));
+    return `<div class="participant-row">
+      <div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.group || "未分組")}</small></div>
+      <div class="completion-dots" aria-label="完成 ${completed} 份">${[1, 2, 3].map((step) => `<i class="${step <= completed ? "complete" : ""}"></i>`).join("")}</div>
+      <span class="score-pill tone-${scoreTone(item.averagePercentage)}">${escapeHtml(`${item.averagePercentage}%`)}</span>
+    </div>`;
+  }).join("");
 }
 
 async function sheetAdminApi(event, payload = {}) {

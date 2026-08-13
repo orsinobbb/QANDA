@@ -87,7 +87,7 @@ npm run build:pages
 
 系統會建立 `Results`、`Competencies`、`Answers`、`AuditLog`、`Participants`、`QuestionBank`、`QuestionnaireItems` 與 `QuestionnaireReleases` 工作表。`QuestionBank` 保存題目內容、答案與評分方式；`QuestionnaireItems` 保存問卷組成；`QuestionnaireReleases` 保存每次正式發布的不可變版本。學員頁會優先讀取中央已發布版本，結果也會記錄實際作答版本。
 
-在管理介面輸入管理權杖後，可以查詢集中結果、匯出 CSV，並查看班級平均、及格率、三卷完成度、能力分布、弱題與學員進度；權杖只保存在目前分頁的 `sessionStorage`，不會寫入 GitHub。
+管理入口為網站網址加上 `?admin=1`。驗證管理權杖前不載入管理工作區；一般網址與 `?survey=問卷ID` 學員連結只顯示作答介面。登入後可以查詢集中結果、匯出 CSV，並查看班級平均、及格率、三卷完成度、能力分布、弱題與學員進度；權杖只保存在目前分頁的 `sessionStorage`，不會寫入 GitHub。
 
 題目生命週期：選擇問卷後可編輯 JSON；「暫存於本機」只供管理者預覽，「發布給學員」才會寫入中央版本並立即供新開啟頁面的學員作答，「停止中央發布」會關閉該問卷。內容未變時重複發布沿用原版本，內容改變才產生新版本，既有成績仍對應原題卷。
 

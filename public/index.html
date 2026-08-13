@@ -12,7 +12,7 @@
         <p class="eyebrow">JSON Questionnaire System</p>
         <h1>問答自我判斷</h1>
       </div>
-      <nav class="view-switcher" aria-label="主要功能">
+      <nav id="viewSwitcher" class="view-switcher" aria-label="主要功能">
         <button class="active" data-view="answer" type="button">作答</button>
         <button data-view="admin" type="button">管理</button>
       </nav>
@@ -147,7 +147,17 @@
       </section>
 
       <section id="adminView" class="view">
-        <div class="admin-grid">
+        <section id="adminGate" class="admin-gate">
+          <small>QANDA MANAGEMENT</small>
+          <h2>管理中心</h2>
+          <p>驗證管理權杖後，才會載入問卷、答案與學習報表。</p>
+          <div>
+            <input id="adminGateToken" type="password" autocomplete="off" placeholder="管理權杖" aria-label="管理權杖" />
+            <button id="adminGateButton" class="primary" type="button">進入管理中心</button>
+          </div>
+          <div id="adminGateMessage" class="message" role="status"></div>
+        </section>
+        <div id="adminWorkspace" class="admin-grid hidden">
           <section class="admin-panel lifecycle-panel">
             <div class="panel-title">
               <div>
@@ -191,6 +201,17 @@
               <button id="saveJsonButton" type="button">暫存於本機</button>
             </div>
             <div id="jsonMessage" class="message"></div>
+            <div id="publishResult" class="publish-result hidden">
+              <div>
+                <small>學員作答連結</small>
+                <strong id="publishResultTitle">問卷已發布</strong>
+              </div>
+              <div class="publish-link-row">
+                <input id="publishResultLink" readonly aria-label="學員作答連結" />
+                <button id="copyPublishLinkButton" type="button">複製</button>
+                <button id="openPublishLinkButton" type="button">開啟</button>
+              </div>
+            </div>
           </section>
 
           <section class="admin-panel ai-panel">
@@ -218,7 +239,7 @@
             <div class="panel-title dashboard-title">
               <div>
                 <small class="step-indicator">學習成效</small>
-                <span>Dashboard</span>
+                <span>學習成效總覽</span>
               </div>
               <div class="dashboard-filters">
                 <select id="dashboardQuestionnaireFilter" aria-label="Dashboard 問卷"></select>
@@ -229,20 +250,27 @@
             <div id="dashboardEmpty" class="dashboard-empty">連線 Google Sheet 後顯示集中報表。</div>
             <div id="dashboardContent" class="dashboard-content hidden">
               <div id="dashboardKpis" class="dashboard-kpis"></div>
+              <div class="dashboard-brief">
+                <div>
+                  <small>教學判讀</small>
+                  <strong id="dashboardInsight">正在分析</strong>
+                </div>
+                <span id="dashboardUpdatedAt"></span>
+              </div>
               <div class="dashboard-grid">
-                <section>
-                  <h3>三卷完成與成績</h3>
+                <section class="dashboard-wide">
+                  <h3>卷別表現比較 <small>虛線為 70% 達標線</small></h3>
                   <div id="dashboardQuestionnaires" class="metric-list"></div>
                 </section>
                 <section>
-                  <h3>能力面向</h3>
+                  <h3>能力診斷</h3>
                   <div id="dashboardCompetencies" class="metric-list"></div>
                 </section>
                 <section>
-                  <h3>待補強題目</h3>
+                  <h3>優先補強題目</h3>
                   <div id="dashboardQuestions" class="rank-list"></div>
                 </section>
-                <section>
+                <section class="dashboard-wide">
                   <h3>學員進展</h3>
                   <div id="dashboardParticipants" class="rank-list"></div>
                 </section>
