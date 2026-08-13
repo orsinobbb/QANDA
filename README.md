@@ -85,11 +85,13 @@ npm run build:pages
 6. 將部署後的 `/exec` 網址填入 `public/integrations.js` 的 `googleAppsScriptUrl`。
 7. 執行 `npm run build:pages`，提交並推送 GitHub Pages。
 
-系統會建立 `Results`、`Competencies`、`Answers`、`AuditLog`、`Participants`、`QuestionBank` 與 `QuestionnaireItems` 工作表。`QuestionBank` 保存題目內容、答案、評分方式與版本；`QuestionnaireItems` 保存題目屬於哪份問卷及其順序，讓同一題可被不同考卷重複使用。
+系統會建立 `Results`、`Competencies`、`Answers`、`AuditLog`、`Participants`、`QuestionBank`、`QuestionnaireItems` 與 `QuestionnaireReleases` 工作表。`QuestionBank` 保存題目內容、答案與評分方式；`QuestionnaireItems` 保存問卷組成；`QuestionnaireReleases` 保存每次正式發布的不可變版本。學員頁會優先讀取中央已發布版本，結果也會記錄實際作答版本。
 
-在管理介面的「結果搜尋與匯出」輸入管理權杖後，可以查詢集中結果與匯出 CSV；權杖只保存在目前分頁的 `sessionStorage`，不會寫入 GitHub。連線後可在 JSON 編輯區使用「同步至題庫」，匯入目前問卷及複合題子題，重複同步不會重複建題。
+在管理介面輸入管理權杖後，可以查詢集中結果、匯出 CSV，並查看班級平均、及格率、三卷完成度、能力分布、弱題與學員進度；權杖只保存在目前分頁的 `sessionStorage`，不會寫入 GitHub。
 
-更新既有 Apps Script 時，貼上新版 `Code.gs`、再次執行 `setup()`，再到「部署 → 管理部署作業 → 編輯 → 新版本」即可保留原本的 `/exec` 網址。若尚未建立管理權杖，再執行 `createAdminToken()`。
+題目生命週期：選擇問卷後可編輯 JSON；「暫存於本機」只供管理者預覽，「發布給學員」才會寫入中央版本並立即供新開啟頁面的學員作答，「停止中央發布」會關閉該問卷。內容未變時重複發布沿用原版本，內容改變才產生新版本，既有成績仍對應原題卷。
+
+更新既有 Apps Script 時，貼上新版 `Code.gs`、再次執行 `setup()`，再到「部署 → 管理部署作業 → 編輯 → 新版本」即可保留原本的 `/exec` 網址。既有管理權杖會保留，不必重新產生；只有遺失或需要撤銷舊權杖時才執行 `createAdminToken()`。
 
 接收端包含問卷白名單、管理 API 權杖、欄位驗證、`sessionId` 防重、寫入鎖定與公式注入防護。若要只接受名單內的人員，先填寫 `Participants`，再把 `Code.gs` 的 `requireParticipantList` 改成 `true`。
 

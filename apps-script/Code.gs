@@ -15,7 +15,8 @@ const SHEETS = Object.freeze({
     "sessionId", "questionnaireId", "questionnaireTitle", "personId", "displayName",
     "group", "status", "startedAt", "expiresAt", "submittedAt", "durationSeconds",
     "score", "maxScore", "percentage", "proficiencyLabel", "recommendation",
-    "answerCount", "competenciesJson", "source", "receivedAt", "payloadSha256"
+    "answerCount", "competenciesJson", "source", "receivedAt", "payloadSha256",
+    "questionnaireVersion"
   ],
   Competencies: [
     "sessionId", "questionnaireId", "personId", "competencyId", "competencyLabel",
@@ -36,6 +37,10 @@ const SHEETS = Object.freeze({
   ],
   QuestionnaireItems: [
     "questionnaireId", "questionnaireVersion", "questionId", "position", "parentQuestionId", "addedAt"
+  ],
+  QuestionnaireReleases: [
+    "questionnaireId", "version", "status", "title", "description", "durationSeconds",
+    "questionCount", "publishedAt", "publishedBy", "contentHash", "questionnaireJson"
   ]
 });
 
@@ -62,8 +67,19 @@ function createAdminToken() {
   return token;
 }
 
-function doGet() {
-  return json_({ ok: true, service: "QANDA Google Sheets receiver", at: new Date().toISOString() });
+function doGet(e) {
+  const action = String(e && e.parameter && e.parameter.action || "");
+  try {
+    if (action === "public.questionnaires") {
+      return json_({ ok: true, data: publicQuestionnaires_(getSpreadsheet_()) });
+    }
+    if (action === "public.questionnaire") {
+      return json_({ ok: true, data: publicQuestionnaire_(getSpreadsheet_(), String(e.parameter.id || "")) });
+    }
+    return json_({ ok: true, service: "QANDA Google Sheets receiver", at: new Date().toISOString() });
+  } catch (error) {
+    return json_({ ok: false, error: error.message || String(error) });
+  }
 }
 
 function doPost(e) {
@@ -132,6 +148,18 @@ function handleAdminRequest_(payload, receivedAt) {
     } finally {
       lock.releaseLock();
     }
+  } else if (payload.event === "admin.questionnaire.publish") {
+    const lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) throw new Error("Publishing is busy; retry later");
+    try {
+      result = publishQuestionnaire_(spreadsheet, payload.questionnaire, payload.actor || "questionnaire-admin");
+    } finally {
+      lock.releaseLock();
+    }
+  } else if (payload.event === "admin.questionnaire.close") {
+    result = closeQuestionnaire_(spreadsheet, payload.questionnaireId, payload.actor || "questionnaire-admin");
+  } else if (payload.event === "admin.dashboard") {
+    result = dashboard_(spreadsheet, payload.filters || {});
   } else {
     throw new Error("Unsupported admin event");
   }
@@ -199,10 +227,156 @@ function resultSummary_(row) {
     percentage: numberOrNull_(row.percentage),
     proficiencyLabel: String(row.proficiencyLabel || ""),
     recommendation: String(row.recommendation || ""),
+    questionnaireVersion: Number(row.questionnaireVersion || 1),
     answerCount: Number(row.answerCount || 0),
     lastSyncAt: dateValue_(row.receivedAt)
   };
 }
+
+function publicQuestionnaires_(spreadsheet) {
+  const latest = latestReleases_(spreadsheet);
+  return {
+    questionnaires: latest.map(function (row) {
+      const questionnaire = parseJson_(row.questionnaireJson, {});
+      questionnaire.lifecycle = Object.assign({}, questionnaire.lifecycle || {}, {
+        status: String(row.status), version: Number(row.version || 1), publishedAt: dateValue_(row.publishedAt)
+      });
+      return questionnaire;
+    }),
+    source: "google-sheet"
+  };
+}
+
+function publicQuestionnaire_(spreadsheet, questionnaireId) {
+  if (!isSafeId_(questionnaireId)) throw new Error("Invalid questionnaire id");
+  const row = latestReleases_(spreadsheet).find(function (item) {
+    return String(item.questionnaireId) === questionnaireId && String(item.status) === "published";
+  });
+  if (!row) throw new Error("Published questionnaire not found");
+  return { questionnaire: parseJson_(row.questionnaireJson, null), source: "google-sheet" };
+}
+
+function latestReleases_(spreadsheet) {
+  const latest = {};
+  sheetObjects_(spreadsheet.getSheetByName("QuestionnaireReleases")).forEach(function (row) {
+    const id = String(row.questionnaireId || "");
+    if (!latest[id] || Number(row.version) > Number(latest[id].version)) latest[id] = row;
+  });
+  return Object.keys(latest).map(function (id) { return latest[id]; });
+}
+
+function publishQuestionnaire_(spreadsheet, questionnaire, actor) {
+  if (!questionnaire || !isSafeId_(questionnaire.id) || !String(questionnaire.title || "").trim()) {
+    throw new Error("Invalid questionnaire");
+  }
+  if (!Array.isArray(questionnaire.questions) || !questionnaire.questions.length) throw new Error("Questionnaire needs questions");
+  const releases = sheetObjects_(spreadsheet.getSheetByName("QuestionnaireReleases"))
+    .filter(function (row) { return String(row.questionnaireId) === questionnaire.id; })
+    .sort(function (a, b) { return Number(b.version) - Number(a.version); });
+  const latest = releases[0] || null;
+  const contentHash = questionnaireContentHash_(questionnaire);
+  if (latest && String(latest.contentHash) === contentHash) {
+    setSheetCell_(spreadsheet.getSheetByName("QuestionnaireReleases"), latest.__rowNumber, "status", "published");
+    return { questionnaireId: questionnaire.id, version: Number(latest.version), publishedAt: dateValue_(latest.publishedAt), reused: true };
+  }
+  const version = latest ? Number(latest.version) + 1 : 1;
+  const publishedAt = new Date().toISOString();
+  const released = JSON.parse(JSON.stringify(questionnaire));
+  released.lifecycle = Object.assign({}, released.lifecycle || {}, {
+    status: "published", version: version, updatedAt: publishedAt, publishedAt: publishedAt
+  });
+  spreadsheet.getSheetByName("QuestionnaireReleases").appendRow([
+    safeCell_(released.id), version, "published", safeCell_(released.title), safeCell_(released.description),
+    number_(released.durationSeconds), flattenQuestionnaire_(released.questions).length, publishedAt,
+    safeCell_(actor), contentHash, safeJson_(released)
+  ]);
+  importQuestionnaire_(spreadsheet, released);
+  return { questionnaireId: released.id, version: version, publishedAt: publishedAt, reused: false };
+}
+
+function closeQuestionnaire_(spreadsheet, questionnaireId) {
+  if (!isSafeId_(questionnaireId)) throw new Error("Invalid questionnaire id");
+  const row = latestReleases_(spreadsheet).find(function (item) { return String(item.questionnaireId) === questionnaireId; });
+  if (!row) throw new Error("Questionnaire release not found");
+  setSheetCell_(spreadsheet.getSheetByName("QuestionnaireReleases"), row.__rowNumber, "status", "closed");
+  return { questionnaireId: questionnaireId, version: Number(row.version), status: "closed" };
+}
+
+function questionnaireContentHash_(questionnaire) {
+  const copy = JSON.parse(JSON.stringify(questionnaire));
+  delete copy.lifecycle;
+  return sha256_(JSON.stringify(copy));
+}
+
+function dashboard_(spreadsheet, filters) {
+  const questionnaireId = String(filters.questionnaireId || "");
+  const group = String(filters.group || "").trim().toLowerCase();
+  const results = sheetObjects_(spreadsheet.getSheetByName("Results")).filter(function (row) {
+    return (!questionnaireId || String(row.questionnaireId) === questionnaireId) &&
+      (!group || String(row.group || "").toLowerCase().indexOf(group) !== -1);
+  });
+  const sessionIds = new Set(results.map(function (row) { return String(row.sessionId); }));
+  const resultBySessionId = {};
+  results.forEach(function (row) { resultBySessionId[String(row.sessionId)] = row; });
+  const competencies = sheetObjects_(spreadsheet.getSheetByName("Competencies")).filter(function (row) {
+    return sessionIds.has(String(row.sessionId));
+  });
+  const answers = sheetObjects_(spreadsheet.getSheetByName("Answers")).filter(function (row) {
+    return sessionIds.has(String(row.sessionId));
+  }).map(function (row) {
+    const result = resultBySessionId[String(row.sessionId)] || {};
+    row.questionnaireVersion = Number(result.questionnaireVersion || 1);
+    return row;
+  });
+  const submitted = results.filter(function (row) { return String(row.status) === "submitted"; });
+  const percentages = submitted.map(function (row) { return Number(row.percentage); }).filter(Number.isFinite);
+  const uniqueParticipants = new Set(submitted.map(function (row) { return String(row.personId); }));
+  return {
+    summary: {
+      submissions: submitted.length,
+      participants: uniqueParticipants.size,
+      averagePercentage: round1_(average_(percentages)),
+      passRate: round1_(submitted.length ? submitted.filter(function (row) { return Number(row.percentage) >= 70; }).length * 100 / submitted.length : 0)
+    },
+    questionnaires: aggregateRows_(submitted, "questionnaireId", function (rows) {
+      return { id: String(rows[0].questionnaireId), label: String(rows[0].questionnaireTitle), submissions: rows.length,
+        averagePercentage: round1_(average_(rows.map(function (row) { return Number(row.percentage); }))),
+        passRate: round1_(rows.filter(function (row) { return Number(row.percentage) >= 70; }).length * 100 / rows.length) };
+    }),
+    competencies: aggregateRows_(competencies, "competencyId", function (rows) {
+      const score = sum_(rows, "score"); const maxScore = sum_(rows, "maxScore");
+      return { id: String(rows[0].competencyId), label: String(rows[0].competencyLabel), attempts: rows.length,
+        percentage: round1_(maxScore ? score * 100 / maxScore : 0) };
+    }).sort(function (a, b) { return a.percentage - b.percentage; }),
+    questions: aggregateRows_(answers, "questionnaireId|questionnaireVersion|questionId", function (rows) {
+      const score = sum_(rows, "score"); const maxScore = sum_(rows, "maxScore");
+      return { id: String(rows[0].questionId), questionnaireId: String(rows[0].questionnaireId),
+        version: Number(rows[0].questionnaireVersion || 1), label: String(rows[0].questionTitle),
+        attempts: rows.length, percentage: round1_(maxScore ? score * 100 / maxScore : 0) };
+    }).sort(function (a, b) { return a.percentage - b.percentage; }).slice(0, 10),
+    participants: aggregateRows_(submitted, "personId", function (rows) {
+      return { id: String(rows[0].personId), label: String(rows[0].displayName || rows[0].personId), group: String(rows[0].group || ""),
+        completed: new Set(rows.map(function (row) { return String(row.questionnaireId); })).size,
+        averagePercentage: round1_(average_(rows.map(function (row) { return Number(row.percentage); }))),
+        latestAt: rows.map(function (row) { return dateValue_(row.submittedAt); }).sort().pop() || "" };
+    }).sort(function (a, b) { return a.averagePercentage - b.averagePercentage; }),
+    filters: { questionnaireId: questionnaireId, group: group },
+    generatedAt: new Date().toISOString()
+  };
+}
+
+function aggregateRows_(rows, keySpec, mapper) {
+  const groups = {};
+  rows.forEach(function (row) {
+    const key = keySpec.split("|").map(function (field) { return String(row[field]); }).join("|");
+    (groups[key] || (groups[key] = [])).push(row);
+  });
+  return Object.keys(groups).map(function (key) { return mapper(groups[key]); });
+}
+
+function sum_(rows, field) { return rows.reduce(function (total, row) { return total + (Number(row[field]) || 0); }, 0); }
+function average_(values) { const valid = values.filter(Number.isFinite); return valid.length ? valid.reduce(function (a, b) { return a + b; }, 0) / valid.length : 0; }
+function round1_(value) { return Math.round(Number(value || 0) * 10) / 10; }
 
 function listQuestionBank_(spreadsheet, filters) {
   const keyword = String(filters.keyword || "").trim().toLowerCase();
@@ -267,12 +441,25 @@ function sheetObjects_(sheet) {
   const values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
   const headers = values[0].map(String);
-  return values.slice(1).filter(function (row) { return row.some(function (cell) { return cell !== ""; }); }).map(function (row) {
+  return values.slice(1).map(function (row, rowIndex) { return { row: row, rowNumber: rowIndex + 2 }; })
+    .filter(function (entry) { return entry.row.some(function (cell) { return cell !== ""; }); }).map(function (entry) {
+    const row = entry.row;
     return headers.reduce(function (object, header, index) {
       object[header] = row[index];
       return object;
-    }, {});
+    }, { __rowNumber: entry.rowNumber });
   });
+}
+
+function setSheetCell_(sheet, rowNumber, header, value) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+  const column = headers.indexOf(header) + 1;
+  if (!column) throw new Error("Missing sheet column: " + header);
+  sheet.getRange(rowNumber, column).setValue(value);
+}
+
+function parseJson_(value, fallback) {
+  try { return JSON.parse(String(value || "")); } catch (_) { return fallback; }
 }
 
 function dateValue_(value) {
@@ -301,10 +488,21 @@ function validatePayload_(payload) {
   if (!isSafeId_(session.id) || !isSafeId_(questionnaire.id)) throw new Error("Invalid identifier");
   if (session.questionnaireId !== questionnaire.id) throw new Error("Questionnaire mismatch");
   if (session.status !== "submitted") throw new Error("Only submitted sessions are accepted");
-  if (QANDA_CONFIG.allowedSurveyIds.indexOf(questionnaire.id) === -1) throw new Error("Questionnaire is not allowed");
+  if (!isAllowedQuestionnaire_(questionnaire.id)) throw new Error("Questionnaire is not allowed");
   if (!session.participant || !isSafeId_(session.participant.personId)) throw new Error("Invalid participant");
   if (!isFiniteNumber_(payload.result.score) || !isFiniteNumber_(payload.result.maxScore)) throw new Error("Invalid score");
   if (Number(payload.result.score) < 0 || Number(payload.result.score) > Number(payload.result.maxScore)) throw new Error("Score is out of range");
+}
+
+function isAllowedQuestionnaire_(questionnaireId) {
+  if (QANDA_CONFIG.allowedSurveyIds.indexOf(questionnaireId) !== -1) return true;
+  try {
+    return latestReleases_(getSpreadsheet_()).some(function (row) {
+      return String(row.questionnaireId) === questionnaireId && String(row.status) === "published";
+    });
+  } catch (_) {
+    return false;
+  }
 }
 
 function validateParticipant_(spreadsheet, participant) {
@@ -329,7 +527,8 @@ function appendResult_(spreadsheet, payload, receivedAt, digest) {
     safeCell_(session.submittedAt), durationSeconds_(session), number_(result.score),
     number_(result.maxScore), number_(result.percentage), safeCell_(proficiency.label),
     safeCell_(proficiency.recommendation), Object.keys(payload.answers || {}).length,
-    safeJson_(result.competencies || []), safeCell_(payload.source), receivedAt, digest
+    safeJson_(result.competencies || []), safeCell_(payload.source), receivedAt, digest,
+    number_(payload.questionnaire.version || 1)
   ]);
 }
 
@@ -383,6 +582,10 @@ function ensureSheets_(spreadsheet) {
       sheet.setFrozenRows(1);
       sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
       sheet.autoResizeColumns(1, headers.length);
+    } else {
+      const existing = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+      const missing = headers.filter(function (header) { return existing.indexOf(header) === -1; });
+      if (missing.length) sheet.getRange(1, existing.length + 1, 1, missing.length).setValues([missing]).setFontWeight("bold");
     }
   });
 }

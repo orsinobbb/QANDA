@@ -4,6 +4,7 @@
   const surveyKey = "static:questionnaires";
   const staticState = {
     builtIn: null,
+    central: null,
     surveys: null
   };
 
@@ -152,11 +153,30 @@
     return staticState.builtIn;
   }
 
+  async function loadCentralSurveys() {
+    if (staticState.central) return staticState.central;
+    const endpoint = String(window.QANDA_CONFIG?.googleAppsScriptUrl || "").trim();
+    if (!endpoint) return [];
+    try {
+      const url = new URL(endpoint);
+      url.searchParams.set("action", "public.questionnaires");
+      url.searchParams.set("t", Date.now());
+      const response = await realFetch(url.toString(), { redirect: "follow", cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok || !Array.isArray(payload.data?.questionnaires)) throw new Error("Invalid central response");
+      staticState.central = payload.data.questionnaires;
+      return staticState.central;
+    } catch (error) {
+      console.warn("Central questionnaire service unavailable; using built-in questionnaires.", error);
+      return [];
+    }
+  }
+
   async function listSurveys() {
     if (staticState.surveys) return staticState.surveys;
-    const builtIn = await loadBuiltInSurveys();
+    const [builtIn, central] = await Promise.all([loadBuiltInSurveys(), loadCentralSurveys()]);
     const saved = Object.values(readJson(surveyKey, {}));
-    staticState.surveys = mergeById([...builtIn, ...saved]);
+    staticState.surveys = mergeById([...builtIn, ...central, ...saved]);
     return staticState.surveys;
   }
 

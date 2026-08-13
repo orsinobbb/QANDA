@@ -65,6 +65,8 @@ const elements = {
   jsonMessage: $("#jsonMessage"),
   reloadJsonButton: $("#reloadJsonButton"),
   syncQuestionBankButton: $("#syncQuestionBankButton"),
+  publishCentralButton: $("#publishCentralButton"),
+  closeCentralButton: $("#closeCentralButton"),
   saveJsonButton: $("#saveJsonButton"),
   lifecycleTitle: $("#lifecycleTitle"),
   lifecycleStatus: $("#lifecycleStatus"),
@@ -90,7 +92,17 @@ const elements = {
   disconnectSheetButton: $("#disconnectSheetButton"),
   resultSourceStatus: $("#resultSourceStatus"),
   resultsBody: $("#resultsBody"),
-  resultDetail: $("#resultDetail")
+  resultDetail: $("#resultDetail"),
+  dashboardQuestionnaireFilter: $("#dashboardQuestionnaireFilter"),
+  dashboardGroupFilter: $("#dashboardGroupFilter"),
+  refreshDashboardButton: $("#refreshDashboardButton"),
+  dashboardEmpty: $("#dashboardEmpty"),
+  dashboardContent: $("#dashboardContent"),
+  dashboardKpis: $("#dashboardKpis"),
+  dashboardQuestionnaires: $("#dashboardQuestionnaires"),
+  dashboardCompetencies: $("#dashboardCompetencies"),
+  dashboardQuestions: $("#dashboardQuestions"),
+  dashboardParticipants: $("#dashboardParticipants")
 };
 
 init();
@@ -101,6 +113,7 @@ async function init() {
   await Promise.all([checkHealth(), loadQuestionnaires()]);
   await loadAdminSurvey();
   await loadResults();
+  await loadDashboard();
 }
 
 function bindEvents() {
@@ -120,6 +133,8 @@ function bindEvents() {
   elements.reloadJsonButton.addEventListener("click", loadAdminSurvey);
   elements.saveJsonButton.addEventListener("click", saveAdminSurvey);
   elements.syncQuestionBankButton.addEventListener("click", syncQuestionBank);
+  elements.publishCentralButton.addEventListener("click", publishCentralQuestionnaire);
+  elements.closeCentralButton.addEventListener("click", closeCentralQuestionnaire);
   elements.lifecycleActions.addEventListener("click", handleLifecycleAction);
   elements.copyShareLinkButton.addEventListener("click", copyShareLink);
   elements.openShareLinkButton.addEventListener("click", openShareLink);
@@ -128,13 +143,14 @@ function bindEvents() {
   elements.exportButton.addEventListener("click", exportResults);
   elements.connectSheetButton.addEventListener("click", connectSheetAdmin);
   elements.disconnectSheetButton.addEventListener("click", disconnectSheetAdmin);
+  elements.refreshDashboardButton.addEventListener("click", loadDashboard);
 }
 
 function showView(view) {
   $$(".view-switcher button").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   $("#answerView").classList.toggle("active", view === "answer");
   $("#adminView").classList.toggle("active", view === "admin");
-  if (view === "admin") loadResults();
+  if (view === "admin") Promise.all([loadResults(), loadDashboard()]);
 }
 
 async function checkHealth() {
@@ -158,6 +174,7 @@ async function loadQuestionnaires(preferredAdminId = "") {
   fillSelect(elements.questionnaireSelect, state.questionnaires);
   fillSelect(elements.adminQuestionnaireSelect, state.adminQuestionnaires, true);
   fillSelect(elements.resultQuestionnaireFilter, [{ id: "", title: "全部問卷" }, ...state.adminQuestionnaires]);
+  fillSelect(elements.dashboardQuestionnaireFilter, [{ id: "", title: "全部問卷" }, ...state.adminQuestionnaires]);
 
   const directSurveyId = new URLSearchParams(window.location.search).get("survey");
   const selectedSurveyId = [directSurveyId, previousSurveyId, state.questionnaires[0]?.id]
@@ -551,7 +568,8 @@ async function syncSubmittedResult(data) {
     session: data.session,
     questionnaire: {
       id: data.questionnaire.id,
-      title: data.questionnaire.title
+      title: data.questionnaire.title,
+      version: Number(data.questionnaire.lifecycle?.version || 1)
     },
     answers: data.session.answers || {},
     result: data.session.result,
@@ -983,13 +1001,13 @@ async function connectSheetAdmin() {
     return;
   }
   sessionStorage.setItem(SHEET_ADMIN_TOKEN_KEY, token);
-  await loadResults();
+  await Promise.all([loadResults(), loadDashboard()]);
 }
 
 async function disconnectSheetAdmin() {
   sessionStorage.removeItem(SHEET_ADMIN_TOKEN_KEY);
   elements.sheetAdminTokenInput.value = "";
-  await loadResults();
+  await Promise.all([loadResults(), loadDashboard()]);
 }
 
 async function syncQuestionBank() {
@@ -1009,6 +1027,113 @@ async function syncQuestionBank() {
   } finally {
     elements.syncQuestionBankButton.disabled = false;
   }
+}
+
+async function publishCentralQuestionnaire() {
+  if (!sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY)) {
+    setMessage(elements.jsonMessage, "請先連線 Google Sheet。", "error");
+    return;
+  }
+  let questionnaire;
+  try {
+    questionnaire = JSON.parse(elements.jsonEditor.value);
+  } catch (error) {
+    setMessage(elements.jsonMessage, `JSON 格式錯誤：${error.message}`, "error");
+    return;
+  }
+  elements.publishCentralButton.disabled = true;
+  setMessage(elements.jsonMessage, "正在建立中央發布版本");
+  try {
+    const response = await sheetAdminApi("admin.questionnaire.publish", {
+      questionnaire,
+      actor: "questionnaire-admin"
+    });
+    const release = response.data;
+    const action = release.reused ? "內容未變更，維持" : "已建立";
+    setMessage(elements.jsonMessage, `${action}第 ${release.version} 版；學員連結已可使用。`, "success");
+    elements.shareLinkInput.value = buildShareUrl(questionnaire.id);
+  } catch (error) {
+    setMessage(elements.jsonMessage, error.message, "error");
+  } finally {
+    elements.publishCentralButton.disabled = false;
+  }
+}
+
+async function closeCentralQuestionnaire() {
+  const questionnaireId = state.adminSurvey?.id;
+  if (!questionnaireId || !sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY)) {
+    setMessage(elements.jsonMessage, "請先載入問卷並連線 Google Sheet。", "error");
+    return;
+  }
+  if (!window.confirm(`確定停止「${state.adminSurvey.title}」的中央發布嗎？`)) return;
+  elements.closeCentralButton.disabled = true;
+  try {
+    const response = await sheetAdminApi("admin.questionnaire.close", { questionnaireId });
+    setMessage(elements.jsonMessage, `第 ${response.data.version} 版已停止接受新作答。`, "success");
+  } catch (error) {
+    setMessage(elements.jsonMessage, error.message, "error");
+  } finally {
+    elements.closeCentralButton.disabled = false;
+  }
+}
+
+async function loadDashboard() {
+  const token = sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY);
+  if (!configuredSheetEndpoint() || !token) {
+    elements.dashboardEmpty.textContent = "連線 Google Sheet 後顯示集中報表。";
+    elements.dashboardEmpty.classList.remove("hidden");
+    elements.dashboardContent.classList.add("hidden");
+    return;
+  }
+  elements.dashboardEmpty.textContent = "正在整理報表";
+  elements.dashboardEmpty.classList.remove("hidden");
+  elements.dashboardContent.classList.add("hidden");
+  try {
+    const response = await sheetAdminApi("admin.dashboard", {
+      filters: {
+        questionnaireId: elements.dashboardQuestionnaireFilter.value,
+        group: elements.dashboardGroupFilter.value.trim()
+      }
+    });
+    renderDashboard(response.data);
+  } catch (error) {
+    elements.dashboardEmpty.textContent = `報表讀取失敗：${error.message}`;
+  }
+}
+
+function renderDashboard(data) {
+  const summary = data.summary || {};
+  elements.dashboardKpis.innerHTML = [
+    ["完成份數", summary.submissions || 0],
+    ["作答人數", summary.participants || 0],
+    ["平均成績", `${summary.averagePercentage || 0}%`],
+    ["通過率", `${summary.passRate || 0}%`]
+  ].map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("");
+  elements.dashboardQuestionnaires.innerHTML = metricRows(data.questionnaires, "averagePercentage", (item) => `${item.submissions} 份 · 通過 ${item.passRate}%`);
+  elements.dashboardCompetencies.innerHTML = metricRows(data.competencies, "percentage", (item) => item.percentage < 60 ? "優先補強" : `${item.attempts} 次評量`);
+  elements.dashboardQuestions.innerHTML = rankRows(data.questions, (item) => `${item.percentage}% · ${item.attempts} 人作答`);
+  elements.dashboardParticipants.innerHTML = rankRows(data.participants, (item) => `${item.completed} 份 · 平均 ${item.averagePercentage}%${item.group ? ` · ${item.group}` : ""}`);
+  elements.dashboardEmpty.classList.add("hidden");
+  elements.dashboardContent.classList.remove("hidden");
+}
+
+function metricRows(items = [], percentageKey, detail) {
+  if (!items.length) return '<div class="dashboard-no-data">尚無資料</div>';
+  return items.map((item) => {
+    const percentage = Math.max(0, Math.min(100, Number(item[percentageKey] || 0)));
+    return `<div class="metric-row">
+      <div><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(detail(item))}</span></div>
+      <div class="metric-track"><i style="width:${percentage}%"></i></div>
+      <b>${escapeHtml(`${percentage}%`)}</b>
+    </div>`;
+  }).join("");
+}
+
+function rankRows(items = [], detail) {
+  if (!items.length) return '<div class="dashboard-no-data">尚無資料</div>';
+  return items.slice(0, 10).map((item, index) => `<div class="rank-row">
+    <span>${index + 1}</span><div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(detail(item))}</small></div>
+  </div>`).join("");
 }
 
 async function sheetAdminApi(event, payload = {}) {

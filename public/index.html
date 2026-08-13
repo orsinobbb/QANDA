@@ -186,7 +186,9 @@
             <div class="admin-actions">
               <button id="reloadJsonButton" type="button">重新載入</button>
               <button id="syncQuestionBankButton" type="button">同步至題庫</button>
-              <button id="saveJsonButton" class="primary" type="button">儲存問卷</button>
+              <button id="closeCentralButton" type="button">停止中央發布</button>
+              <button id="publishCentralButton" class="primary" type="button">發布給學員</button>
+              <button id="saveJsonButton" type="button">暫存於本機</button>
             </div>
             <div id="jsonMessage" class="message"></div>
           </section>
@@ -210,6 +212,42 @@
             </label>
             <button id="generateButton" class="primary" type="button">產生草稿</button>
             <div id="aiMessage" class="message"></div>
+          </section>
+
+          <section class="admin-panel dashboard-panel">
+            <div class="panel-title dashboard-title">
+              <div>
+                <small class="step-indicator">學習成效</small>
+                <span>Dashboard</span>
+              </div>
+              <div class="dashboard-filters">
+                <select id="dashboardQuestionnaireFilter" aria-label="Dashboard 問卷"></select>
+                <input id="dashboardGroupFilter" aria-label="Dashboard 群組" placeholder="群組篩選" />
+                <button id="refreshDashboardButton" type="button">更新報表</button>
+              </div>
+            </div>
+            <div id="dashboardEmpty" class="dashboard-empty">連線 Google Sheet 後顯示集中報表。</div>
+            <div id="dashboardContent" class="dashboard-content hidden">
+              <div id="dashboardKpis" class="dashboard-kpis"></div>
+              <div class="dashboard-grid">
+                <section>
+                  <h3>三卷完成與成績</h3>
+                  <div id="dashboardQuestionnaires" class="metric-list"></div>
+                </section>
+                <section>
+                  <h3>能力面向</h3>
+                  <div id="dashboardCompetencies" class="metric-list"></div>
+                </section>
+                <section>
+                  <h3>待補強題目</h3>
+                  <div id="dashboardQuestions" class="rank-list"></div>
+                </section>
+                <section>
+                  <h3>學員進展</h3>
+                  <div id="dashboardParticipants" class="rank-list"></div>
+                </section>
+              </div>
+            </div>
           </section>
 
           <section class="admin-panel results-panel">
