@@ -1,11 +1,11 @@
 {
   "id": "ai-backend-production",
-  "title": "AI 協作後端程式設計｜第三份：整合與上線決策",
-  "description": "透過權限、安全、可觀測性、CI/CD 與事故處理，驗證學生是否能負責 AI 協作成果的正式環境交付。",
+  "title": "AI 協作後端程式設計｜入門 C 卷：安全與上線",
+  "description": "以簡單明確的安全、監控與部署情境，檢核初學者對正式上線流程的基本認識。",
   "courseReference": "AI 協作後端程式設計",
-  "assessmentLevel": "production",
-  "durationSeconds": 2400,
-  "passPercentage": 75,
+  "assessmentLevel": "foundation",
+  "durationSeconds": 900,
+  "passPercentage": 70,
   "competencies": [
     { "id": "security", "label": "認證授權與安全" },
     { "id": "observability", "label": "可觀測性與事故處理" },
@@ -13,10 +13,9 @@
     { "id": "ai-governance", "label": "AI 治理與責任" }
   ],
   "proficiencyRules": [
-    { "minPercentage": 85, "label": "可主責上線交付", "recommendation": "具備正式環境決策基礎，可安排綜合專題與實際 code review。" },
-    { "minPercentage": 70, "label": "可參與上線交付", "recommendation": "可在資深工程師審查下交付，優先補強最低能力面向。" },
-    { "minPercentage": 50, "label": "需完成情境補強", "recommendation": "建議完成安全與事故演練後再承擔正式環境變更。" },
-    { "minPercentage": 0, "label": "尚未達上線門檻", "recommendation": "回到實作能力卷，先建立可靠性、測試與資料一致性能力。" }
+    { "minPercentage": 80, "label": "上線基本觀念穩固", "recommendation": "可在指導下參與部署與監控練習。" },
+    { "minPercentage": 60, "label": "部分觀念待補強", "recommendation": "複習安全、監控與部署流程後再測。" },
+    { "minPercentage": 0, "label": "建議重新複習", "recommendation": "先完成安全與上線入門單元。" }
   ],
   "lifecycle": {
     "status": "published",
@@ -63,16 +62,16 @@
     {
       "id": "p_q3",
       "type": "multiple",
-      "title": "可觀測性訊號",
-      "prompt": "調查 API 延遲突然升高時，哪些資料應彼此關聯？",
+      "title": "查看系統問題",
+      "prompt": "API 突然變慢時，哪些資料最適合先拿來了解狀況？",
       "competency": "observability",
       "options": [
-        { "value": "metrics", "label": "延遲、錯誤率、流量與資源指標" },
-        { "value": "logs", "label": "具 request ID 的結構化日誌" },
-        { "value": "traces", "label": "跨服務 trace" },
-        { "value": "guess", "label": "只依最後一次 AI 對話猜測" }
+        { "value": "metrics", "label": "延遲與錯誤率等監控指標" },
+        { "value": "logs", "label": "系統產生的錯誤日誌" },
+        { "value": "guess", "label": "只憑感覺猜測" },
+        { "value": "color", "label": "網站按鈕的顏色" }
       ],
-      "correctAnswer": ["metrics", "logs", "traces"],
+      "correctAnswer": ["metrics", "logs"],
       "maxScore": 10
     },
     {
@@ -113,33 +112,31 @@
         {
           "id": "p_q5b",
           "type": "multiple",
-          "title": "事故證據",
-          "prompt": "哪些證據應被保留並放入事故時間線？",
+          "title": "保留事故紀錄",
+          "prompt": "系統發生事故時，哪些資料應保留下來？",
           "competency": "observability",
           "options": [
-            { "value": "deploy", "label": "部署版本、時間與變更 diff" },
-            { "value": "signals", "label": "指標、日誌與 trace" },
-            { "value": "actions", "label": "處置指令、決策人與結果" },
-            { "value": "delete", "label": "為避免究責，刪除 AI 對話與執行紀錄" }
+            { "value": "deploy", "label": "部署時間與版本" },
+            { "value": "actions", "label": "處理動作與結果" },
+            { "value": "delete", "label": "刪除所有錯誤日誌" },
+            { "value": "none", "label": "只記住大概發生過什麼" }
           ],
-          "correctAnswer": ["deploy", "signals", "actions"],
+          "correctAnswer": ["deploy", "actions"],
           "maxScore": 12
         },
         {
           "id": "p_q5c",
           "type": "multiple",
-          "title": "事故應變與復盤",
-          "prompt": "處理這次上線事故時，哪些做法同時符合事故應變與 AI 治理原則？",
+          "title": "人員與 AI 的責任",
+          "prompt": "使用 AI 協助處理系統事故時，哪些做法正確？",
           "competency": "ai-governance",
           "options": [
-            { "value": "contain", "label": "確認影響與指揮角色，依程序回滾或隔離止血" },
-            { "value": "evidence", "label": "保留部署、指標、日誌與處置紀錄，建立事故時間線" },
-            { "value": "recover", "label": "驗證服務恢復、通知利害關係人並追蹤改善項目" },
-            { "value": "ai-assist", "label": "讓 AI 協助整理證據、提出假設與草擬修復方案" },
-            { "value": "ai-decide", "label": "由 AI 自行決定是否回滾與何時重新上線" },
-            { "value": "erase", "label": "事故結束後刪除 AI 對話與操作紀錄以避免究責" }
+            { "value": "ai-assist", "label": "AI 可以協助整理日誌與提出可能原因" },
+            { "value": "recover", "label": "人員必須驗證修復結果並負責上線決定" },
+            { "value": "ai-decide", "label": "讓 AI 不經確認直接重新上線" },
+            { "value": "erase", "label": "事故後刪除所有操作紀錄" }
           ],
-          "correctAnswer": ["contain", "evidence", "recover", "ai-assist"],
+          "correctAnswer": ["ai-assist", "recover"],
           "maxScore": 18
         }
       ]
@@ -161,28 +158,28 @@
     {
       "id": "p_q7",
       "type": "multiple",
-      "title": "AI 變更治理",
-      "prompt": "為了讓 AI 協作變更可追溯，至少應記錄哪些項目？",
+      "title": "記錄 AI 協作變更",
+      "prompt": "AI 協助修改程式後，哪些資料應保留？",
       "competency": "ai-governance",
       "options": [
-        { "value": "model", "label": "模型與主要提示內容或版本" },
-        { "value": "diff", "label": "產生及最終採用的程式差異" },
-        { "value": "verification", "label": "測試、審查人與核准結果" },
-        { "value": "none", "label": "只記錄最後成功部署時間" }
+        { "value": "diff", "label": "實際採用的程式變更" },
+        { "value": "verification", "label": "測試結果與審查人" },
+        { "value": "none", "label": "不用記錄，只要程式能執行" },
+        { "value": "delete", "label": "合併後刪除測試結果" }
       ],
-      "correctAnswer": ["model", "diff", "verification"],
+      "correctAnswer": ["diff", "verification"],
       "maxScore": 10
     },
     {
       "id": "p_q8",
       "type": "single",
-      "title": "慢查詢優化",
-      "prompt": "決定新增資料庫索引前，最有說服力的依據是哪一項？",
+      "title": "改善慢查詢",
+      "prompt": "資料庫查詢很慢時，採取改善措施前最應先做什麼？",
       "competency": "delivery",
       "options": [
-        { "value": "plan", "label": "實際查詢樣本、執行計畫與量測結果" },
-        { "value": "all-index", "label": "替每個欄位都建立索引" },
-        { "value": "ai-says", "label": "AI 說可能有效，不需量測" }
+        { "value": "plan", "label": "量測實際查詢時間並查看執行狀況" },
+        { "value": "all-index", "label": "不檢查就替所有欄位建立索引" },
+        { "value": "ai-says", "label": "只採用 AI 猜測，不做量測" }
       ],
       "correctAnswer": "plan",
       "maxScore": 8

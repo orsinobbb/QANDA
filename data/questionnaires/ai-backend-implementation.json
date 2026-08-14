@@ -1,10 +1,10 @@
 {
   "id": "ai-backend-implementation",
-  "title": "AI 協作後端程式設計｜第二份：實作能力",
-  "description": "以資料一致性、遷移、重試、測試與除錯情境，驗證學生能否把 AI 建議轉成可靠的後端實作。",
+  "title": "AI 協作後端程式設計｜入門 B 卷：資料與測試",
+  "description": "以初學者可理解的資料庫、錯誤處理與測試情境，檢核基本後端實作觀念。",
   "courseReference": "AI 協作後端程式設計",
-  "assessmentLevel": "implementation",
-  "durationSeconds": 1800,
+  "assessmentLevel": "foundation",
+  "durationSeconds": 900,
   "passPercentage": 70,
   "competencies": [
     { "id": "data", "label": "資料庫與一致性" },
@@ -13,9 +13,9 @@
     { "id": "ai-review", "label": "AI 程式審查" }
   ],
   "proficiencyRules": [
-    { "minPercentage": 80, "label": "具備可靠實作能力", "recommendation": "可進入正式環境整合卷，處理安全、部署與可觀測性。" },
-    { "minPercentage": 60, "label": "可實作但需指導", "recommendation": "針對資料一致性與測試策略完成一次情境實作後再測。" },
-    { "minPercentage": 0, "label": "實作基礎不足", "recommendation": "建議回到基礎診斷卷，補足 API 與資料流觀念。" }
+    { "minPercentage": 80, "label": "入門觀念穩固", "recommendation": "可進一步練習資料一致性與自動化測試。" },
+    { "minPercentage": 60, "label": "部分觀念待補強", "recommendation": "複習答錯題目的資料與測試基本觀念後再測。" },
+    { "minPercentage": 0, "label": "建議重新複習", "recommendation": "先完成資料庫、錯誤處理與測試入門單元。" }
   ],
   "lifecycle": {
     "status": "published",
@@ -48,14 +48,13 @@
     {
       "id": "i_q2",
       "type": "single",
-      "title": "查詢效能",
-      "prompt": "列表 API 先查 100 筆訂單，再逐筆查詢使用者，最可能形成什麼問題？",
+      "title": "避免重複查詢",
+      "prompt": "顯示訂單清單時，程式對每筆訂單都再查一次使用者，造成大量資料庫查詢。最適合的改善方向是什麼？",
       "competency": "data",
       "options": [
-        { "value": "n-plus-one", "label": "N+1 查詢" },
-        { "value": "dead-code", "label": "無效程式碼" },
-        { "value": "csrf", "label": "CSRF" },
-        { "value": "other", "label": "其它", "allowText": true, "textPlaceholder": "請填寫問題名稱" }
+        { "value": "n-plus-one", "label": "一次取得需要的關聯資料，減少逐筆查詢" },
+        { "value": "dead-code", "label": "把 API 名稱改短" },
+        { "value": "csrf", "label": "把資料改成純文字檔" }
       ],
       "correctAnswer": "n-plus-one",
       "maxScore": 8
@@ -63,29 +62,28 @@
     {
       "id": "i_q3",
       "type": "multiple",
-      "title": "資料庫遷移",
-      "prompt": "正式環境新增 NOT NULL 欄位時，哪些做法較安全？",
+      "title": "安全修改資料表",
+      "prompt": "正式環境修改資料表前，哪些基本做法較安全？",
       "competency": "data",
       "options": [
-        { "value": "backfill", "label": "先建立可相容欄位並回填既有資料" },
-        { "value": "staged", "label": "分階段部署程式與約束" },
-        { "value": "rollback", "label": "準備回復或前向修正方案" },
-        { "value": "manual", "label": "直接在線上資料庫手動改表且不留版本" }
+        { "value": "backfill", "label": "先備份並確認既有資料如何處理" },
+        { "value": "rollback", "label": "準備失敗時的回復方案" },
+        { "value": "manual", "label": "直接修改正式資料庫且不留紀錄" },
+        { "value": "guess", "label": "不測試，假設修改一定成功" }
       ],
-      "correctAnswer": ["backfill", "staged", "rollback"],
+      "correctAnswer": ["backfill", "rollback"],
       "maxScore": 10
     },
     {
       "id": "i_q4",
       "type": "single",
-      "title": "並行更新控制",
-      "prompt": "後端以 version 欄位比對更新前後版本，若版本不一致就拒絕寫入。這是哪一種並行控制機制？",
+      "title": "避免覆蓋別人的修改",
+      "prompt": "兩人同時編輯同一筆資料時，後端發現版本不同便拒絕較晚的更新。這樣做的主要目的為何？",
       "competency": "data",
       "options": [
-        { "value": "optimistic", "label": "樂觀鎖（Optimistic locking）" },
-        { "value": "pessimistic", "label": "悲觀鎖（Pessimistic locking）" },
-        { "value": "distributed", "label": "分散式鎖（Distributed lock）" },
-        { "value": "table", "label": "資料表鎖（Table lock）" }
+        { "value": "optimistic", "label": "避免較新的資料被舊版本覆蓋" },
+        { "value": "pessimistic", "label": "讓所有使用者共用同一密碼" },
+        { "value": "distributed", "label": "自動刪除較舊的資料" }
       ],
       "correctAnswer": "optimistic",
       "maxScore": 8
@@ -99,11 +97,11 @@
         {
           "id": "i_q5a",
           "type": "single",
-          "title": "第一道防線",
-          "prompt": "API 設計最應優先加入哪一項機制？",
+          "title": "避免重複扣款",
+          "prompt": "付款請求可能因逾時而重送，API 最應優先做到什麼？",
           "competency": "reliability",
           "options": [
-            { "value": "idempotency-key", "label": "Idempotency key 與相同請求結果重用" },
+            { "value": "idempotency-key", "label": "辨識相同請求，避免再次扣款" },
             { "value": "long-timeout", "label": "把逾時延長到十分鐘" },
             { "value": "hide-error", "label": "永遠回傳成功，避免重送" }
           ],
@@ -113,33 +111,31 @@
         {
           "id": "i_q5b",
           "type": "multiple",
-          "title": "資料與追蹤保護",
-          "prompt": "哪些措施可共同降低重複扣款並提升可追查性？",
+          "title": "付款紀錄保護",
+          "prompt": "哪些做法有助於避免重複扣款並保留查詢依據？",
           "competency": "reliability",
           "options": [
-            { "value": "unique", "label": "付款意圖或外部交易編號唯一約束" },
-            { "value": "transaction", "label": "狀態更新使用交易與明確狀態機" },
-            { "value": "correlation", "label": "請求與外部交易共用 correlation ID" },
-            { "value": "blind-retry", "label": "所有錯誤都無限立即重試" }
+            { "value": "unique", "label": "每筆付款使用不可重複的交易編號" },
+            { "value": "correlation", "label": "保留請求與付款服務的追蹤編號" },
+            { "value": "blind-retry", "label": "失敗時無限快速重送" },
+            { "value": "delete", "label": "付款成功後立刻刪除紀錄" }
           ],
-          "correctAnswer": ["unique", "transaction", "correlation"],
+          "correctAnswer": ["unique", "correlation"],
           "maxScore": 12
         },
         {
           "id": "i_q5c",
           "type": "multiple",
-          "title": "修復與驗證計畫",
-          "prompt": "修復重複扣款問題並驗證改善成效時，哪些工作不可省略？",
+          "title": "修復後確認",
+          "prompt": "修正重複扣款問題後，哪些動作可以證明修復有效？",
           "competency": "reliability",
           "options": [
-            { "value": "scope", "label": "先重現問題、界定受影響交易並處理既有重複資料" },
-            { "value": "guards", "label": "加入冪等鍵、唯一約束或交易等防重機制" },
-            { "value": "tests", "label": "執行併發與整合測試，證明相同請求只產生一次扣款" },
-            { "value": "monitor", "label": "上線後監控重複交易、錯誤率與補償處理結果" },
-            { "value": "timeout", "label": "只把逾時時間加長，不改變交易保護" },
-            { "value": "manual", "label": "只請客服人工檢查，略過自動化測試" }
+            { "value": "tests", "label": "用相同付款請求重送測試，確認只扣款一次" },
+            { "value": "monitor", "label": "上線後持續查看是否仍有重複交易" },
+            { "value": "timeout", "label": "不測試，只把等待時間加長" },
+            { "value": "manual", "label": "刪除錯誤紀錄，避免看到問題" }
           ],
-          "correctAnswer": ["scope", "guards", "tests", "monitor"],
+          "correctAnswer": ["tests", "monitor"],
           "maxScore": 18
         }
       ]
@@ -176,8 +172,8 @@
     {
       "id": "i_q8",
       "type": "single",
-      "title": "版本衝突回應",
-      "prompt": "用戶更新資源時版本已落後，伺服器偵測到狀態衝突，常見的 HTTP status 是哪一個？",
+      "title": "資料版本衝突",
+      "prompt": "更新資料時發現版本衝突，常用哪一個 HTTP 狀態碼？",
       "competency": "reliability",
       "options": [
         { "value": "409", "label": "409 Conflict" },

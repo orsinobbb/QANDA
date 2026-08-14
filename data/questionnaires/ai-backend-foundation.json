@@ -1,10 +1,10 @@
 {
   "id": "ai-backend-foundation",
-  "title": "AI 協作後端程式設計｜第一份：基礎診斷",
-  "description": "檢核 HTTP、REST API、輸入驗證、資料安全與 AI 協作基本觀念，適合作為課前診斷或基礎單元驗收。",
+  "title": "AI 協作後端程式設計｜入門 A 卷：API 基礎",
+  "description": "以清楚直接的情境檢核 HTTP、API、安全與 AI 協作基本觀念，適合初學者課後練習。",
   "courseReference": "AI 協作後端程式設計",
   "assessmentLevel": "foundation",
-  "durationSeconds": 1200,
+  "durationSeconds": 900,
   "passPercentage": 70,
   "competencies": [
     { "id": "api", "label": "HTTP 與 API 設計" },
@@ -77,14 +77,13 @@
     {
       "id": "f_q4",
       "type": "single",
-      "title": "重複請求安全性",
-      "prompt": "同一個建立訂單請求重送多次仍只產生一筆訂單，這項特性稱為什麼？",
+      "title": "避免重複訂單",
+      "prompt": "使用者不小心按了兩次送出，但系統仍只建立一筆訂單。哪個選項最符合這種設計？",
       "competency": "api",
       "options": [
-        { "value": "idempotency", "label": "冪等性（Idempotency）" },
-        { "value": "availability", "label": "可用性（Availability）" },
-        { "value": "serialization", "label": "序列化（Serialization）" },
-        { "value": "replication", "label": "資料複寫（Replication）" }
+        { "value": "idempotency", "label": "相同請求重送時，不重複建立資料" },
+        { "value": "availability", "label": "增加更多伺服器" },
+        { "value": "serialization", "label": "把物件轉成 JSON" }
       ],
       "correctAnswer": "idempotency",
       "maxScore": 10
@@ -98,8 +97,8 @@
         {
           "id": "f_q5a",
           "type": "single",
-          "title": "責任分層",
-          "prompt": "哪一種流程最有利於測試與維護？",
+      "title": "程式責任分工",
+      "prompt": "哪一種寫法最容易測試與維護？",
           "competency": "architecture",
           "options": [
             { "value": "layered", "label": "Route 接收請求，Service 處理規則，Repository 存取資料" },
