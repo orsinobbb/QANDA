@@ -1,3 +1,10 @@
+import {
+  acceptCollaborationCandidate,
+  buildAiCollaborationPrompt,
+  createCollaborationPackage,
+  inspectCollaborationPackage
+} from "./collaboration-package.js";
+
 const state = {
   questionnaires: [],
   adminQuestionnaires: [],
@@ -13,7 +20,9 @@ const state = {
   resultSource: "local",
   remoteResults: [],
   activeAdminSection: "design",
-  hasUnpublishedDraft: false
+  hasUnpublishedDraft: false,
+  collaborationProposal: null,
+  newQuestionnaireIdTouched: false
 };
 
 const SHEET_ADMIN_TOKEN_KEY = "qanda:sheet-admin-token";
@@ -48,6 +57,7 @@ const elements = {
   healthStatus: $("#healthStatus"),
   questionnaireSelect: $("#questionnaireSelect"),
   adminQuestionnaireSelect: $("#adminQuestionnaireSelect"),
+  newQuestionnaireButton: $("#newQuestionnaireButton"),
   resultQuestionnaireFilter: $("#resultQuestionnaireFilter"),
   displayNameInput: $("#displayNameInput"),
   groupInput: $("#groupInput"),
@@ -106,6 +116,35 @@ const elements = {
   aiPromptInput: $("#aiPromptInput"),
   generateButton: $("#generateButton"),
   aiMessage: $("#aiMessage"),
+  collaborationPurposeInput: $("#collaborationPurposeInput"),
+  collaborationAudienceInput: $("#collaborationAudienceInput"),
+  collaborationDifficultyInput: $("#collaborationDifficultyInput"),
+  fixedAnswerOnlyInput: $("#fixedAnswerOnlyInput"),
+  exportCollaborationButton: $("#exportCollaborationButton"),
+  copyCollaborationPromptButton: $("#copyCollaborationPromptButton"),
+  chooseCollaborationFileButton: $("#chooseCollaborationFileButton"),
+  collaborationFileInput: $("#collaborationFileInput"),
+  collaborationJsonInput: $("#collaborationJsonInput"),
+  reviewCollaborationButton: $("#reviewCollaborationButton"),
+  collaborationMessage: $("#collaborationMessage"),
+  proposalReview: $("#proposalReview"),
+  proposalReviewTitle: $("#proposalReviewTitle"),
+  proposalStats: $("#proposalStats"),
+  proposalWarnings: $("#proposalWarnings"),
+  proposalChanges: $("#proposalChanges"),
+  discardProposalButton: $("#discardProposalButton"),
+  acceptProposalButton: $("#acceptProposalButton"),
+  newQuestionnaireDialog: $("#newQuestionnaireDialog"),
+  newQuestionnaireForm: $("#newQuestionnaireForm"),
+  newQuestionnaireTitleInput: $("#newQuestionnaireTitleInput"),
+  newQuestionnaireIdInput: $("#newQuestionnaireIdInput"),
+  newQuestionnairePurposeInput: $("#newQuestionnairePurposeInput"),
+  newQuestionnaireAudienceInput: $("#newQuestionnaireAudienceInput"),
+  newQuestionnaireDifficultyInput: $("#newQuestionnaireDifficultyInput"),
+  newQuestionnaireDurationInput: $("#newQuestionnaireDurationInput"),
+  newQuestionnairePassInput: $("#newQuestionnairePassInput"),
+  newQuestionnaireMessage: $("#newQuestionnaireMessage"),
+  cancelNewQuestionnaireButton: $("#cancelNewQuestionnaireButton"),
   resultStatusFilter: $("#resultStatusFilter"),
   resultKeywordInput: $("#resultKeywordInput"),
   searchResultsButton: $("#searchResultsButton"),
@@ -164,6 +203,13 @@ function bindEvents() {
   elements.confirmSubmitButton.addEventListener("click", submitAnswers);
   elements.restoreDraftButton.addEventListener("click", restoreLocalDraft);
   elements.adminQuestionnaireSelect.addEventListener("change", handleAdminSurveySelection);
+  elements.newQuestionnaireButton.addEventListener("click", openNewQuestionnaireDialog);
+  elements.newQuestionnaireForm.addEventListener("submit", createNewQuestionnaire);
+  elements.cancelNewQuestionnaireButton.addEventListener("click", () => elements.newQuestionnaireDialog.close());
+  elements.newQuestionnaireTitleInput.addEventListener("input", suggestNewQuestionnaireId);
+  elements.newQuestionnaireIdInput.addEventListener("input", () => {
+    state.newQuestionnaireIdTouched = true;
+  });
   elements.adminNavigation.addEventListener("click", handleAdminNavigation);
   elements.goPublishButton.addEventListener("click", () => showAdminSection("publish"));
   elements.jsonEditor.addEventListener("input", handleEditorChange);
@@ -177,6 +223,13 @@ function bindEvents() {
   elements.copyShareLinkButton.addEventListener("click", copyShareLink);
   elements.openShareLinkButton.addEventListener("click", openShareLink);
   elements.generateButton.addEventListener("click", generateQuestionnaire);
+  elements.exportCollaborationButton.addEventListener("click", exportCollaborationPackage);
+  elements.copyCollaborationPromptButton.addEventListener("click", copyCollaborationPrompt);
+  elements.chooseCollaborationFileButton.addEventListener("click", () => elements.collaborationFileInput.click());
+  elements.collaborationFileInput.addEventListener("change", importCollaborationFile);
+  elements.reviewCollaborationButton.addEventListener("click", reviewPastedCollaborationPackage);
+  elements.discardProposalButton.addEventListener("click", discardCollaborationProposal);
+  elements.acceptProposalButton.addEventListener("click", acceptCollaborationProposal);
   elements.searchResultsButton.addEventListener("click", loadResults);
   elements.exportButton.addEventListener("click", exportResults);
   elements.disconnectSheetButton.addEventListener("click", disconnectSheetAdmin);
@@ -236,6 +289,7 @@ function showAdminSection(section) {
 
 async function handleAdminSurveySelection() {
   state.hasUnpublishedDraft = false;
+  discardCollaborationProposal({ keepMessage: false });
   await loadAdminSurvey();
   syncResultFiltersToCurrentSurvey();
   if (state.activeAdminSection === "results") await Promise.all([loadResults(), loadDashboard()]);
@@ -251,6 +305,132 @@ function syncResultFiltersToCurrentSurvey() {
 function handleEditorChange() {
   state.hasUnpublishedDraft = true;
   if (state.activeAdminSection === "publish") renderPublishPreview();
+}
+
+function openNewQuestionnaireDialog() {
+  elements.newQuestionnaireForm.reset();
+  elements.newQuestionnaireDifficultyInput.value = "foundation";
+  elements.newQuestionnaireDurationInput.value = "15";
+  elements.newQuestionnairePassInput.value = "70";
+  elements.newQuestionnaireIdInput.value = defaultQuestionnaireId();
+  state.newQuestionnaireIdTouched = false;
+  setMessage(elements.newQuestionnaireMessage, "");
+  elements.newQuestionnaireDialog.showModal();
+  elements.newQuestionnaireTitleInput.focus();
+}
+
+function suggestNewQuestionnaireId() {
+  if (state.newQuestionnaireIdTouched) return;
+  elements.newQuestionnaireIdInput.value = slugifyQuestionnaireId(elements.newQuestionnaireTitleInput.value)
+    || defaultQuestionnaireId();
+}
+
+async function createNewQuestionnaire(event) {
+  event.preventDefault();
+  const id = elements.newQuestionnaireIdInput.value.trim();
+  const title = elements.newQuestionnaireTitleInput.value.trim();
+  const purpose = elements.newQuestionnairePurposeInput.value.trim();
+  if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+    setMessage(elements.newQuestionnaireMessage, "題卷 ID 只能使用英文字母、數字、連字號或底線。", "error");
+    return;
+  }
+  if (state.adminQuestionnaires.some((questionnaire) => questionnaire.id === id)) {
+    setMessage(elements.newQuestionnaireMessage, "這個題卷 ID 已存在，請改用另一個 ID。", "error");
+    return;
+  }
+
+  const submitButton = elements.newQuestionnaireForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  setMessage(elements.newQuestionnaireMessage, "正在建立草稿");
+  try {
+    const questionnaire = buildStarterQuestionnaire({
+      id,
+      title,
+      purpose,
+      audience: elements.newQuestionnaireAudienceInput.value.trim(),
+      difficulty: elements.newQuestionnaireDifficultyInput.value,
+      durationMinutes: Number(elements.newQuestionnaireDurationInput.value || 15),
+      passPercentage: Number(elements.newQuestionnairePassInput.value || 70)
+    });
+    await api("/api/questionnaires", { method: "POST", body: { questionnaire } });
+    await loadQuestionnaires(id);
+    await loadAdminSurvey();
+    showAdminSection("design");
+    elements.newQuestionnaireDialog.close();
+    setMessage(elements.jsonMessage, `已建立「${title}」草稿；請修改範例題或交給 AI 產生候選版本。`, "success");
+  } catch (error) {
+    setMessage(elements.newQuestionnaireMessage, error.message, "error");
+  } finally {
+    submitButton.disabled = false;
+  }
+}
+
+function buildStarterQuestionnaire({ id, title, purpose, audience, difficulty, durationMinutes, passPercentage }) {
+  return {
+    id,
+    title,
+    description: purpose,
+    audience,
+    assessmentLevel: difficulty,
+    durationSeconds: Math.max(1, durationMinutes) * 60,
+    passPercentage,
+    competencies: [{ id: "core", label: "核心能力" }],
+    proficiencyRules: [
+      { minPercentage: 80, label: "能力穩固", recommendation: "可進入下一階段。" },
+      { minPercentage: 60, label: "部分達成", recommendation: "依錯題補強後再次練習。" },
+      { minPercentage: 0, label: "需要補強", recommendation: "回到基礎內容並由教師協助確認觀念。" }
+    ],
+    lifecycle: {
+      status: "draft",
+      version: 1,
+      owner: "questionnaire-admin",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      audit: []
+    },
+    accessRoster: [],
+    questions: [
+      {
+        id: "q1",
+        type: "single",
+        title: "待編輯題目",
+        prompt: `關於「${purpose || title}」，下列哪一項最符合本題的正確判斷？`,
+        competency: "core",
+        options: [
+          { value: "correct", label: "請改為正確選項" },
+          { value: "distractor", label: "請改為干擾選項" }
+        ],
+        correctAnswer: "correct",
+        maxScore: 100
+      }
+    ]
+  };
+}
+
+function defaultQuestionnaireId() {
+  const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 12);
+  return `survey-${stamp}`;
+}
+
+function slugifyQuestionnaireId(value) {
+  const source = String(value || "").trim();
+  if (!source) return "";
+
+  const readable = source
+    .normalize("NFKD")
+    .replace(/[^a-zA-Z0-9\s_-]/g, "")
+    .trim()
+    .replace(/[\s_]+/g, "-")
+    .toLowerCase();
+
+  if (readable.length >= 4) return readable;
+
+  let hash = 2166136261;
+  for (const character of source) {
+    hash ^= character.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${readable || "survey"}-${(hash >>> 0).toString(36).slice(0, 6)}`;
 }
 
 async function checkHealth() {
@@ -867,6 +1047,8 @@ async function loadAdminSurvey() {
     const summary = currentAdminSurveySummary(data.questionnaire.id);
     state.hasUnpublishedDraft = Boolean(data.draft || summary?.hasLocalDraft);
     elements.jsonEditor.value = JSON.stringify(data.questionnaire, null, 2);
+    populateCollaborationBrief(data.questionnaire);
+    discardCollaborationProposal({ keepMessage: false });
     renderLifecycle(data.questionnaire);
     setMessage(
       elements.jsonMessage,
@@ -887,6 +1069,8 @@ async function saveAdminSurvey() {
     await loadQuestionnaires(data.questionnaire.id);
     state.adminSurvey = data.questionnaire;
     elements.jsonEditor.value = JSON.stringify(data.questionnaire, null, 2);
+    populateCollaborationBrief(data.questionnaire);
+    discardCollaborationProposal({ keepMessage: false });
     renderLifecycle(data.questionnaire);
   } catch (error) {
     setMessage(elements.jsonMessage, error.message, "error");
@@ -1042,33 +1226,269 @@ function openShareLink() {
   if (elements.shareLinkInput.value) window.open(elements.shareLinkInput.value, "_blank", "noopener");
 }
 
+function populateCollaborationBrief(questionnaire) {
+  elements.collaborationPurposeInput.value = questionnaire.description || "";
+  elements.collaborationAudienceInput.value = questionnaire.audience || questionnaire.courseReference || "";
+  elements.collaborationDifficultyInput.value = ["foundation", "intermediate", "advanced"].includes(questionnaire.assessmentLevel)
+    ? questionnaire.assessmentLevel
+    : "foundation";
+  elements.fixedAnswerOnlyInput.checked = !containsQuestionType(questionnaire.questions, "short");
+  elements.aiTitleInput.value = questionnaire.title || "AI 生成問卷";
+  elements.aiDurationInput.value = Math.max(1, Math.ceil(Number(questionnaire.durationSeconds || 900) / 60));
+}
+
+function collaborationBrief(questionnaire) {
+  return {
+    purpose: elements.collaborationPurposeInput.value.trim(),
+    audience: elements.collaborationAudienceInput.value.trim(),
+    difficulty: elements.collaborationDifficultyInput.value,
+    durationMinutes: Math.max(1, Math.ceil(Number(questionnaire.durationSeconds || 900) / 60)),
+    passPercentage: Number(questionnaire.passPercentage ?? 70)
+  };
+}
+
+function collaborationRules() {
+  const fixedAnswerOnly = elements.fixedAnswerOnlyInput.checked;
+  return {
+    fixedAnswerOnly,
+    shortAnswerAllowed: !fixedAnswerOnly,
+    allowedTypes: fixedAnswerOnly
+      ? ["boolean", "single", "multiple", "composite"]
+      : ["boolean", "single", "multiple", "short", "composite"],
+    requireAnswerKey: true
+  };
+}
+
+function readEditorQuestionnaire() {
+  try {
+    return JSON.parse(elements.jsonEditor.value);
+  } catch (error) {
+    throw new Error(`編輯器 JSON 格式錯誤：${error.message}`);
+  }
+}
+
+async function buildCurrentCollaborationPackage() {
+  const questionnaire = readEditorQuestionnaire();
+  return createCollaborationPackage({
+    baseQuestionnaire: questionnaire,
+    candidateQuestionnaire: questionnaire,
+    brief: collaborationBrief(questionnaire),
+    rules: collaborationRules(),
+    proposal: { authorType: "teacher", summary: ["以目前編輯器內容作為修改基準"] }
+  });
+}
+
+async function exportCollaborationPackage() {
+  try {
+    const packageData = await buildCurrentCollaborationPackage();
+    const json = JSON.stringify(packageData, null, 2);
+    elements.collaborationJsonInput.value = json;
+    downloadJson(`${packageData.questionnaire.id}-qanda-v1.json`, json);
+    setMessage(elements.collaborationMessage, "協作包已匯出；內容不含學員名單、作答結果與發布稽核。", "success");
+  } catch (error) {
+    setMessage(elements.collaborationMessage, error.message, "error");
+  }
+}
+
+async function copyCollaborationPrompt() {
+  try {
+    const packageData = await buildCurrentCollaborationPackage();
+    const prompt = buildAiCollaborationPrompt(packageData);
+    elements.collaborationJsonInput.value = JSON.stringify(packageData, null, 2);
+    await writeClipboard(prompt);
+    setMessage(elements.collaborationMessage, "已複製 AI 任務與完整協作包。", "success");
+  } catch (error) {
+    setMessage(elements.collaborationMessage, error.message, "error");
+  }
+}
+
+async function importCollaborationFile() {
+  const [file] = elements.collaborationFileInput.files || [];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) {
+    setMessage(elements.collaborationMessage, "協作包不可超過 2 MB。", "error");
+    return;
+  }
+  try {
+    elements.collaborationJsonInput.value = await file.text();
+    await prepareCollaborationProposal(elements.collaborationJsonInput.value, file.name);
+  } catch (error) {
+    setMessage(elements.collaborationMessage, error.message, "error");
+  } finally {
+    elements.collaborationFileInput.value = "";
+  }
+}
+
+async function reviewPastedCollaborationPackage() {
+  if (!elements.collaborationJsonInput.value.trim()) {
+    setMessage(elements.collaborationMessage, "請貼上協作包 JSON，或選擇檔案。", "error");
+    return;
+  }
+  await prepareCollaborationProposal(elements.collaborationJsonInput.value, "貼上的協作包");
+}
+
+async function prepareCollaborationProposal(packageData, sourceLabel) {
+  try {
+    const currentQuestionnaire = readEditorQuestionnaire();
+    const inspection = await inspectCollaborationPackage(packageData, currentQuestionnaire);
+    state.collaborationProposal = { ...inspection, sourceLabel };
+    renderCollaborationProposal();
+    if (inspection.errors.length) {
+      setMessage(elements.collaborationMessage, `驗證未通過：${inspection.errors[0]}`, "error");
+    } else if (inspection.warnings.length) {
+      setMessage(elements.collaborationMessage, "協作包可審核，但基準版本已有差異。", "error");
+    } else {
+      setMessage(elements.collaborationMessage, "驗證通過；請檢視差異後決定是否接受。", "success");
+    }
+  } catch (error) {
+    state.collaborationProposal = null;
+    elements.proposalReview.classList.add("hidden");
+    setMessage(elements.collaborationMessage, error.message, "error");
+  }
+}
+
+function renderCollaborationProposal() {
+  const review = state.collaborationProposal;
+  if (!review) {
+    elements.proposalReview.classList.add("hidden");
+    return;
+  }
+
+  const { comparison, package: packageData } = review;
+  elements.proposalReviewTitle.textContent = `${review.sourceLabel} · ${review.candidate?.title || "未命名題卷"}`;
+  elements.proposalStats.innerHTML = [
+    ["新增", comparison.stats.added],
+    ["修改", comparison.stats.changed],
+    ["移除", comparison.stats.removed],
+    ["總分", comparison.candidateScore]
+  ].map(([label, value]) => `<span><small>${label}</small><strong>${value}</strong></span>`).join("");
+
+  const notices = [];
+  if (packageData?.proposal?.summary?.length) {
+    notices.push(`<div><strong>提案摘要</strong><span>${packageData.proposal.summary.map(escapeHtml).join("；")}</span></div>`);
+  }
+  if (packageData?.proposal?.assumptions?.length) {
+    notices.push(`<div><strong>待確認假設</strong><span>${packageData.proposal.assumptions.map(escapeHtml).join("；")}</span></div>`);
+  }
+  if (review.warnings.length) {
+    notices.push(`<div><strong>版本提醒</strong><span>${review.warnings.map(escapeHtml).join("；")}</span></div>`);
+  }
+  if (review.errors.length) {
+    notices.push(`<div class="proposal-error"><strong>不可接受</strong><span>${review.errors.map(escapeHtml).join("；")}</span></div>`);
+  }
+  elements.proposalWarnings.innerHTML = notices.join("");
+  elements.proposalWarnings.classList.toggle("hidden", notices.length === 0);
+
+  const changes = comparison.changes.length
+    ? comparison.changes
+    : [{ type: "unchanged", label: "沒有內容差異", detail: "候選版本與目前編輯器相同" }];
+  elements.proposalChanges.innerHTML = changes.map((change) => `
+    <li class="proposal-change-${escapeHtml(change.type)}">
+      <strong>${escapeHtml(change.label)}</strong>
+      <span>${escapeHtml(change.detail)}</span>
+    </li>`).join("");
+  elements.acceptProposalButton.disabled = !review.canAccept;
+  elements.proposalReview.classList.remove("hidden");
+  elements.proposalReview.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function acceptCollaborationProposal() {
+  const review = state.collaborationProposal;
+  if (!review?.canAccept) return;
+  try {
+    const currentQuestionnaire = readEditorQuestionnaire();
+    const accepted = acceptCollaborationCandidate(currentQuestionnaire, review.candidate);
+    elements.jsonEditor.value = JSON.stringify(accepted, null, 2);
+    state.hasUnpublishedDraft = true;
+    populateCollaborationBrief(accepted);
+    renderLifecycle(accepted);
+    state.collaborationProposal = null;
+    elements.proposalReview.classList.add("hidden");
+    setMessage(elements.collaborationMessage, "候選版本已帶入編輯器，尚未儲存或發布。", "success");
+    setMessage(elements.jsonMessage, "已接受候選版本；請檢查 JSON 後儲存草稿。", "success");
+    elements.jsonEditor.scrollIntoView({ behavior: "smooth", block: "center" });
+  } catch (error) {
+    setMessage(elements.collaborationMessage, error.message, "error");
+  }
+}
+
+function discardCollaborationProposal({ keepMessage = true } = {}) {
+  state.collaborationProposal = null;
+  elements.proposalReview.classList.add("hidden");
+  elements.collaborationJsonInput.value = "";
+  elements.collaborationFileInput.value = "";
+  if (keepMessage) setMessage(elements.collaborationMessage, "候選版本已捨棄，編輯器內容未變更。", "success");
+  else setMessage(elements.collaborationMessage, "");
+}
+
 async function generateQuestionnaire() {
-  setMessage(elements.aiMessage, "產生中");
+  setMessage(elements.aiMessage, "正在產生候選版本");
   elements.generateButton.disabled = true;
   try {
+    const currentQuestionnaire = readEditorQuestionnaire();
     const data = await api("/api/ai/questionnaires", {
       method: "POST",
       body: {
         title: elements.aiTitleInput.value.trim(),
         durationMinutes: Number(elements.aiDurationInput.value || 15),
-        prompt: elements.aiPromptInput.value.trim()
+        prompt: elements.aiPromptInput.value.trim(),
+        fixedAnswerOnly: elements.fixedAnswerOnlyInput.checked
       }
     });
-    elements.jsonEditor.value = JSON.stringify(data.questionnaire, null, 2);
-    state.adminSurvey = data.questionnaire;
-    state.hasUnpublishedDraft = true;
-    renderLifecycle(data.questionnaire);
-    setMessage(
-      elements.aiMessage,
-      data.validationErrors?.length
-        ? `已產生草稿，但需修正：${data.validationErrors.join("、")}`
-        : `已產生草稿，provider: ${data.provider}`,
-      data.validationErrors?.length ? "error" : "success"
-    );
+    const candidate = {
+      ...data.questionnaire,
+      id: currentQuestionnaire.id,
+      passPercentage: data.questionnaire.passPercentage ?? currentQuestionnaire.passPercentage ?? 70,
+      assessmentLevel: data.questionnaire.assessmentLevel ?? elements.collaborationDifficultyInput.value
+    };
+    const packageData = await createCollaborationPackage({
+      baseQuestionnaire: currentQuestionnaire,
+      candidateQuestionnaire: candidate,
+      brief: collaborationBrief(candidate),
+      rules: collaborationRules(),
+      proposal: {
+        authorType: "ai",
+        model: data.model || data.provider,
+        summary: ["依目前題卷與出卷需求產生候選版本"],
+        assumptions: data.validationErrors || []
+      }
+    });
+    elements.collaborationJsonInput.value = JSON.stringify(packageData, null, 2);
+    await prepareCollaborationProposal(packageData, `內建 AI · ${data.provider}`);
+    setMessage(elements.aiMessage, "AI 提案已產生；請在下方檢視差異。", "success");
   } catch (error) {
     setMessage(elements.aiMessage, error.message, "error");
   } finally {
     elements.generateButton.disabled = false;
+  }
+}
+
+function containsQuestionType(questions = [], type) {
+  return questions.some((question) => question.type === type
+    || (question.type === "composite" && containsQuestionType(question.questions || [], type)));
+}
+
+function downloadJson(filename, json) {
+  const url = URL.createObjectURL(new Blob([json], { type: "application/json;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function writeClipboard(value) {
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.append(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    textarea.remove();
   }
 }
 

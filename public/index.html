@@ -163,6 +163,7 @@
             <div class="admin-survey-context">
               <label for="adminQuestionnaireSelect">目前管理的考卷</label>
               <select id="adminQuestionnaireSelect"></select>
+              <button id="newQuestionnaireButton" class="new-questionnaire-button" type="button">＋ 建立新題卷</button>
               <div class="admin-survey-state">
                 <span id="sidebarLifecycleStatus" class="status">--</span>
                 <small id="sidebarLifecycleVersion">第 -- 版</small>
@@ -227,8 +228,8 @@
                 <section class="admin-panel ai-panel">
                   <div class="panel-title">
                     <div>
-                      <small class="step-indicator">建立草稿</small>
-                      <span>AI 出卷助手</span>
+                      <small class="step-indicator">AI 候選版本</small>
+                      <span>內建出卷助手</span>
                     </div>
                     <small id="aiProviderLabel">fallback 可用</small>
                   </div>
@@ -244,8 +245,76 @@
                     出卷需求
                     <textarea id="aiPromptInput">設計一份評估使用者能否理解問答系統、資料記憶與 AI 改卷流程的問卷。</textarea>
                   </label>
-                  <button id="generateButton" type="button">產生草稿並帶入編輯器</button>
+                  <button id="generateButton" type="button">產生 AI 提案</button>
                   <div id="aiMessage" class="message"></div>
+                </section>
+
+                <section class="admin-panel collaboration-panel">
+                  <div class="panel-title collaboration-title">
+                    <div>
+                      <small class="step-indicator">教師 × AI</small>
+                      <span>題卷協作交換站</span>
+                    </div>
+                    <code>qanda-questionnaire/v1</code>
+                  </div>
+
+                  <div class="collaboration-grid">
+                    <div class="collaboration-brief">
+                      <label>
+                        評量目的
+                        <textarea id="collaborationPurposeInput" rows="3"></textarea>
+                      </label>
+                      <label>
+                        對象
+                        <input id="collaborationAudienceInput" placeholder="例如：完成第一堂課的初學者" />
+                      </label>
+                      <div class="brief-row">
+                        <label>
+                          難度
+                          <select id="collaborationDifficultyInput">
+                            <option value="foundation">基礎</option>
+                            <option value="intermediate">應用</option>
+                            <option value="advanced">進階</option>
+                          </select>
+                        </label>
+                        <label class="check-control">
+                          <input id="fixedAnswerOnlyInput" type="checkbox" checked />
+                          <span>只允許固定答案題型</span>
+                        </label>
+                      </div>
+                      <div class="collaboration-actions">
+                        <button id="exportCollaborationButton" type="button">匯出協作包</button>
+                        <button id="copyCollaborationPromptButton" type="button">複製給 AI</button>
+                      </div>
+                    </div>
+
+                    <div class="collaboration-import">
+                      <div class="import-heading">
+                        <strong>匯入候選版本</strong>
+                        <button id="chooseCollaborationFileButton" type="button">選擇 JSON</button>
+                        <input id="collaborationFileInput" class="hidden" type="file" accept="application/json,.json" />
+                      </div>
+                      <textarea id="collaborationJsonInput" rows="8" spellcheck="false" placeholder="貼上 AI 回傳的完整協作包 JSON"></textarea>
+                      <button id="reviewCollaborationButton" class="primary" type="button">驗證並檢視差異</button>
+                      <div id="collaborationMessage" class="message" role="status" aria-live="polite"></div>
+                    </div>
+                  </div>
+
+                  <section id="proposalReview" class="proposal-review hidden" aria-live="polite">
+                    <div class="proposal-review-heading">
+                      <div>
+                        <small>候選版本審核</small>
+                        <strong id="proposalReviewTitle">等待提案</strong>
+                      </div>
+                      <div id="proposalStats" class="proposal-stats"></div>
+                    </div>
+                    <div id="proposalWarnings" class="proposal-warnings hidden"></div>
+                    <ul id="proposalChanges" class="proposal-changes"></ul>
+                    <div class="proposal-actions">
+                      <button id="discardProposalButton" type="button">捨棄提案</button>
+                      <button id="acceptProposalButton" class="primary" type="button">接受至編輯器</button>
+                    </div>
+                  </section>
                 </section>
               </div>
             </section>
@@ -418,6 +487,52 @@
           <button id="confirmSubmitButton" class="primary" type="button">確認送出</button>
         </div>
       </div>
+    </dialog>
+
+    <dialog id="newQuestionnaireDialog" class="submit-dialog questionnaire-dialog">
+      <form id="newQuestionnaireForm" class="dialog-content">
+        <div class="stage-label">建立草稿</div>
+        <h2>建立新題卷</h2>
+        <div class="dialog-form-grid">
+          <label>
+            題卷名稱
+            <input id="newQuestionnaireTitleInput" required placeholder="例如：API 錯誤處理診斷" />
+          </label>
+          <label>
+            題卷 ID
+            <input id="newQuestionnaireIdInput" required pattern="[A-Za-z0-9_-]+" placeholder="api-error-diagnostic" />
+          </label>
+          <label class="dialog-wide-field">
+            評量目的
+            <textarea id="newQuestionnairePurposeInput" required rows="3" placeholder="完成後要能判斷哪些能力"></textarea>
+          </label>
+          <label>
+            對象
+            <input id="newQuestionnaireAudienceInput" placeholder="例如：後端課程初學者" />
+          </label>
+          <label>
+            難度
+            <select id="newQuestionnaireDifficultyInput">
+              <option value="foundation">基礎</option>
+              <option value="intermediate">應用</option>
+              <option value="advanced">進階</option>
+            </select>
+          </label>
+          <label>
+            作答時間（分鐘）
+            <input id="newQuestionnaireDurationInput" type="number" min="1" max="240" value="15" required />
+          </label>
+          <label>
+            及格門檻（%）
+            <input id="newQuestionnairePassInput" type="number" min="0" max="100" value="70" required />
+          </label>
+        </div>
+        <div id="newQuestionnaireMessage" class="message" role="status" aria-live="polite"></div>
+        <div class="dialog-actions">
+          <button id="cancelNewQuestionnaireButton" type="button">取消</button>
+          <button class="primary" type="submit">建立並開始編輯</button>
+        </div>
+      </form>
     </dialog>
 
     <script src="/integrations.js"></script>

@@ -644,6 +644,24 @@
 
   function fallbackSurvey(body) {
     const title = body.title || "AI 生成問卷";
+    const questions = [
+      { id: "q1", type: "boolean", title: "核心判斷", prompt: "作答者能清楚辨識此主題的主要目標。", correctAnswer: true, maxScore: 5 },
+      {
+        id: "q2",
+        type: "single",
+        title: "流程選擇",
+        prompt: "哪一項最適合作為優先工作？",
+        options: [
+          { value: "clarify", label: "釐清目標與判準" },
+          { value: "other", label: "其它", allowText: true, textPlaceholder: "自行填寫" }
+        ],
+        correctAnswer: "clarify",
+        maxScore: 10
+      }
+    ];
+    if (!body.fixedAnswerOnly) {
+      questions.push({ id: "q3", type: "short", title: "簡答分析", prompt: "請說明你的判斷方式。", gradingMode: "ai", rubric: "包含判準、證據或可追蹤結果。", maxScore: 20 });
+    }
     return {
       id: `${slugify(title)}-${Date.now().toString(36)}`,
       title,
@@ -657,22 +675,7 @@
         audit: []
       },
       accessRoster: [{ personId: "A001", displayName: "測試作答者", serial: "STAR-2026", group: "static" }],
-      questions: [
-        { id: "q1", type: "boolean", title: "核心判斷", prompt: "作答者能清楚辨識此主題的主要目標。", correctAnswer: true, maxScore: 5 },
-        {
-          id: "q2",
-          type: "single",
-          title: "流程選擇",
-          prompt: "哪一項最適合作為優先工作？",
-          options: [
-            { value: "clarify", label: "釐清目標與判準" },
-            { value: "other", label: "其它", allowText: true, textPlaceholder: "自行填寫" }
-          ],
-          correctAnswer: "clarify",
-          maxScore: 10
-        },
-        { id: "q3", type: "short", title: "簡答分析", prompt: "請說明你的判斷方式。", gradingMode: "ai", rubric: "包含判準、證據或可追蹤結果。", maxScore: 20 }
-      ]
+      questions
     };
   }
 

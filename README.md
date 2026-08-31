@@ -49,6 +49,18 @@ http://localhost:4173
 
 更新既有考卷時，仍使用同一個學員連結。重新發布後，新開始的作答使用最新版本；已完成的結果保留當時版本，不會被新版覆蓋。
 
+### 老師與 AI 協作出題
+
+AI 是提案者，老師是唯一能接受、儲存與發布的人。管理工作台的標準流程如下：
+
+1. 按「新增問卷」建立有目的、對象、難度與作答時間的老師草稿。
+2. 在「AI 協作」匯出協作包，或複製已包含格式契約的 AI 任務文字。
+3. 將 AI 回傳的 JSON 檔案上傳或貼回系統；系統先驗證格式、題號、選項、答案與配分。
+4. 逐項查看新增、移除、修改與總分差異，按「接受提案」後才會更新編輯器。
+5. 老師再儲存草稿、預覽並發布；AI 無法直接發布，也不會取得管理權杖、名單或作答結果。
+
+協作包格式為 `qanda-questionnaire/v1`，正式 JSON Schema 位於 [`public/schemas/qanda-questionnaire-package-v1.schema.json`](public/schemas/qanda-questionnaire-package-v1.schema.json)。匯出的 `baseFingerprint` 用來辨識 AI 是否基於老師匯出的版本修改；未來若開放 AI 連結，權限也應限制為「讀取指定草稿、提出候選版本」，不能共用管理者發布權限。
+
 ## 功能範圍
 
 - `data/questionnaires/*.json`：一份 JSON 就是一張問卷。
@@ -57,7 +69,7 @@ http://localhost:4173
 - `POST /api/sessions/:id/submit`：送出後自動改固定答案，AI 題型可接 provider。
 - `GET /api/results`：搜尋與分類後端作答結果。
 - `GET /api/results/export.csv`：匯出 CSV。
-- `POST /api/ai/questionnaires`：AI 出卷，沒有金鑰時會產生可測的本機草稿。
+- `POST /api/ai/questionnaires`：AI 產生候選提案，沒有金鑰時會產生可測的本機提案；接受前不會覆蓋老師草稿。
 - 問卷生命週期：`draft → review → published → closed → archived`，管理端可執行合法轉換、查看版本與稽核紀錄。
 - `PATCH /api/questionnaires/:id/lifecycle`：變更問卷狀態；只有 `published` 問卷能啟動新作答。
 

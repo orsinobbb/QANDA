@@ -3,13 +3,16 @@ import { gradeAnswers } from "./surveyEngine.js";
 const defaultModel = process.env.AI_MODEL || "gpt-4.1-mini";
 const apiUrl = process.env.AI_API_URL || "https://api.openai.com/v1/chat/completions";
 
-export async function generateQuestionnaireDraft({ prompt, title, durationMinutes = 15 }) {
+export async function generateQuestionnaireDraft({ prompt, title, durationMinutes = 15, fixedAnswerOnly = false }) {
   if (process.env.AI_API_KEY) {
+    const typeRule = fixedAnswerOnly
+      ? "Only use boolean, single, multiple, or composite questions. Do not use short questions."
+      : "Question types: boolean, single, multiple, short, composite.";
     const generated = await callAiJson({
       system: "You create strict JSON questionnaires. Return only JSON, no markdown.",
       user: `Create a Traditional Chinese questionnaire JSON for this need: ${prompt}
 Schema: id, title, description, durationSeconds, accessRoster, questions.
-Question types: boolean, single, multiple, short, composite.
+${typeRule}
 Include correctAnswer for fixed grading and gradingMode/rubric for AI grading when needed.
 Use option objects with value and label. For an "other: ____" choice, add allowText: true and optional textPlaceholder.`
     });
@@ -23,7 +26,7 @@ Use option objects with value and label. For an "other: ____" choice, add allowT
   return {
     provider: "local-fallback",
     model: "rule-template",
-    questionnaire: buildFallbackSurvey({ prompt, title, durationMinutes })
+    questionnaire: buildFallbackSurvey({ prompt, title, durationMinutes, fixedAnswerOnly })
   };
 }
 
@@ -131,8 +134,57 @@ function normalizeGeneratedSurvey(generated, title, durationMinutes) {
   return survey;
 }
 
-function buildFallbackSurvey({ prompt, title, durationMinutes }) {
+function buildFallbackSurvey({ prompt, title, durationMinutes, fixedAnswerOnly }) {
   const surveyTitle = title || "AI 草稿問卷";
+  const questions = [
+    {
+      id: "q1",
+      type: "boolean",
+      title: "核心判斷",
+      prompt: "作答者能清楚辨識此主題的主要目標。",
+      correctAnswer: true,
+      maxScore: 5
+    },
+    {
+      id: "q2",
+      type: "single",
+      title: "單選理解",
+      prompt: "哪一個選項最能代表此主題的優先工作？",
+      options: [
+        { value: "clarify", label: "釐清目標與判準" },
+        { value: "ignore", label: "略過限制條件" },
+        { value: "delay", label: "等待所有細節完美" },
+        { value: "other", label: "其它", allowText: true, textPlaceholder: "自行填寫" }
+      ],
+      correctAnswer: "clarify",
+      maxScore: 10
+    },
+    {
+      id: "q3",
+      type: "multiple",
+      title: "多選應用",
+      prompt: "哪些資料適合被記錄以便後續追蹤？",
+      options: [
+        { value: "answer", label: "作答內容" },
+        { value: "time", label: "提交時間" },
+        { value: "reason", label: "評分理由" },
+        { value: "noise", label: "無關暫存雜訊" }
+      ],
+      correctAnswer: ["answer", "time", "reason"],
+      maxScore: 15
+    }
+  ];
+  if (!fixedAnswerOnly) {
+    questions.push({
+      id: "q4",
+      type: "short",
+      title: "簡答分析",
+      prompt: "請說明你會如何判斷此主題的回答品質。",
+      gradingMode: "ai",
+      rubric: "回答需要包含判準、證據或可追蹤結果。",
+      maxScore: 20
+    });
+  }
   return {
     id: `${slugify(surveyTitle)}-${Date.now().toString(36)}`,
     title: surveyTitle,
@@ -146,53 +198,7 @@ function buildFallbackSurvey({ prompt, title, durationMinutes }) {
         group: "ai-draft"
       }
     ],
-    questions: [
-      {
-        id: "q1",
-        type: "boolean",
-        title: "核心判斷",
-        prompt: "作答者能清楚辨識此主題的主要目標。",
-        correctAnswer: true,
-        maxScore: 5
-      },
-      {
-        id: "q2",
-        type: "single",
-        title: "單選理解",
-        prompt: "哪一個選項最能代表此主題的優先工作？",
-        options: [
-          { value: "clarify", label: "釐清目標與判準" },
-          { value: "ignore", label: "略過限制條件" },
-          { value: "delay", label: "等待所有細節完美" },
-          { value: "other", label: "其它", allowText: true, textPlaceholder: "自行填寫" }
-        ],
-        correctAnswer: "clarify",
-        maxScore: 10
-      },
-      {
-        id: "q3",
-        type: "multiple",
-        title: "多選應用",
-        prompt: "哪些資料適合被記錄以便後續追蹤？",
-        options: [
-          { value: "answer", label: "作答內容" },
-          { value: "time", label: "提交時間" },
-          { value: "reason", label: "評分理由" },
-          { value: "noise", label: "無關暫存雜訊" }
-        ],
-        correctAnswer: ["answer", "time", "reason"],
-        maxScore: 15
-      },
-      {
-        id: "q4",
-        type: "short",
-        title: "簡答分析",
-        prompt: "請說明你會如何判斷此主題的回答品質。",
-        gradingMode: "ai",
-        rubric: "回答需要包含判準、證據或可追蹤結果。",
-        maxScore: 20
-      }
-    ]
+    questions
   };
 }
 

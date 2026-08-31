@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orsinobbb.github.io/QANDA/schemas/qanda-questionnaire-package-v1.schema.json",
+  "title": "QANDA Questionnaire Collaboration Package v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "operation", "exportedAt", "base", "brief", "rules", "questionnaire", "proposal"],
+  "properties": {
+    "format": { "const": "qanda-questionnaire/v1" },
+    "operation": { "enum": ["create", "revise"] },
+    "exportedAt": { "type": "string", "format": "date-time" },
+    "base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["questionnaireId", "version", "contentHash"],
+      "properties": {
+        "questionnaireId": { "type": ["string", "null"] },
+        "version": { "type": "integer", "minimum": 0 },
+        "contentHash": { "type": ["string", "null"] }
+      }
+    },
+    "brief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["purpose", "audience", "difficulty", "durationMinutes", "totalScore", "passPercentage"],
+      "properties": {
+        "purpose": { "type": "string" },
+        "audience": { "type": "string" },
+        "difficulty": { "type": "string" },
+        "durationMinutes": { "type": "number", "exclusiveMinimum": 0 },
+        "totalScore": { "type": "number", "minimum": 0 },
+        "passPercentage": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowedTypes", "fixedAnswerOnly", "shortAnswerAllowed", "requireAnswerKey"],
+      "properties": {
+        "allowedTypes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["boolean", "single", "multiple", "short", "composite"] }
+        },
+        "fixedAnswerOnly": { "type": "boolean" },
+        "shortAnswerAllowed": { "type": "boolean" },
+        "requireAnswerKey": { "type": "boolean" }
+      }
+    },
+    "questionnaire": {
+      "type": "object",
+      "required": ["id", "title", "durationSeconds", "questions"],
+      "allOf": [
+        {
+          "not": {
+            "anyOf": [
+              { "required": ["accessRoster"] },
+              { "required": ["lifecycle"] },
+              { "required": ["sessions"] },
+              { "required": ["results"] },
+              { "required": ["participants"] },
+              { "required": ["adminToken"] },
+              { "required": ["token"] }
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-zA-Z0-9_-]+$" },
+        "title": { "type": "string", "minLength": 1 },
+        "durationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "questions": { "type": "array", "minItems": 1 }
+      }
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authorType", "model", "summary", "assumptions"],
+      "properties": {
+        "authorType": { "enum": ["teacher", "ai"] },
+        "model": { "type": ["string", "null"] },
+        "summary": { "type": "array", "items": { "type": "string" } },
+        "assumptions": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

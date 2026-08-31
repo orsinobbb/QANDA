@@ -1054,6 +1054,13 @@ main {
   font-weight: 800;
 }
 
+.new-questionnaire-button {
+  width: 100%;
+  border-style: dashed;
+  color: var(--teal-dark);
+  font-weight: 800;
+}
+
 .admin-survey-state {
   display: flex;
   align-items: center;
@@ -1192,6 +1199,219 @@ main {
   gap: 14px;
   padding: 18px;
   box-shadow: 0 8px 24px rgba(32, 42, 48, 0.07);
+}
+
+.collaboration-panel {
+  grid-column: 1 / -1;
+  gap: 18px;
+}
+
+.collaboration-title code {
+  border: 1px solid #cbd8e7;
+  border-radius: 6px;
+  background: #edf3fa;
+  color: var(--blue);
+  padding: 5px 8px;
+  font-size: 0.72rem;
+}
+
+.collaboration-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(360px, 1.2fr);
+  gap: 22px;
+}
+
+.collaboration-brief,
+.collaboration-import {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.brief-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.6fr) minmax(220px, 1.4fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.check-control {
+  display: flex;
+  align-items: center;
+  min-height: 43px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f9faf9;
+  padding: 8px 10px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.check-control input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--teal);
+}
+
+.collaboration-actions,
+.proposal-actions,
+.import-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.import-heading {
+  justify-content: space-between;
+}
+
+.import-heading strong {
+  font-size: 0.88rem;
+}
+
+.collaboration-import textarea {
+  min-height: 202px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.78rem;
+}
+
+.proposal-review {
+  display: grid;
+  gap: 14px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.proposal-review-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.proposal-review-heading > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.proposal-review-heading small {
+  color: var(--blue);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.proposal-stats {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.proposal-stats span {
+  display: grid;
+  min-width: 62px;
+  gap: 2px;
+  padding: 7px 10px;
+  text-align: center;
+}
+
+.proposal-stats span + span {
+  border-left: 1px solid var(--line);
+}
+
+.proposal-stats small {
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+
+.proposal-stats strong {
+  font-size: 0.92rem;
+}
+
+.proposal-warnings {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--gold);
+  background: #fff9eb;
+}
+
+.proposal-warnings > div {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 10px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.proposal-warnings span {
+  color: var(--muted);
+}
+
+.proposal-warnings .proposal-error {
+  color: var(--coral);
+}
+
+.proposal-changes {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.proposal-changes li {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.35fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.proposal-changes strong {
+  font-size: 0.82rem;
+}
+
+.proposal-changes span {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.proposal-change-added strong {
+  color: var(--teal-dark);
+}
+
+.proposal-change-removed strong,
+.proposal-change-score strong {
+  color: var(--coral);
+}
+
+.proposal-actions {
+  justify-content: flex-end;
+}
+
+.dialog-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 20px 0 8px;
+}
+
+.dialog-wide-field {
+  grid-column: 1 / -1;
+}
+
+.questionnaire-dialog {
+  width: min(680px, calc(100vw - 28px));
+}
+
+.questionnaire-dialog textarea {
+  min-height: 92px;
 }
 
 .lifecycle-panel {
@@ -1842,6 +2062,10 @@ main {
 }
 
 @media (max-width: 820px) {
+  .collaboration-grid {
+    grid-template-columns: 1fr;
+  }
+
   .sheet-admin-connect {
     grid-template-columns: 1fr 1fr;
   }
@@ -2120,6 +2344,36 @@ tbody tr:hover {
     display: grid;
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .dialog-form-grid,
+  .brief-row {
+    grid-template-columns: 1fr;
+  }
+
+  .dialog-wide-field {
+    grid-column: auto;
+  }
+
+  .collaboration-actions,
+  .proposal-review-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .proposal-stats {
+    width: 100%;
+  }
+
+  .proposal-stats span {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .proposal-changes li,
+  .proposal-warnings > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 
   .question-card {
