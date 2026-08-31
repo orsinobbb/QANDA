@@ -11,7 +11,9 @@ const state = {
   localDraft: null,
   activeQuestionId: null,
   resultSource: "local",
-  remoteResults: []
+  remoteResults: [],
+  activeAdminSection: "design",
+  hasUnpublishedDraft: false
 };
 
 const SHEET_ADMIN_TOKEN_KEY = "qanda:sheet-admin-token";
@@ -21,13 +23,22 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 const elements = {
+  productContext: $("#productContext"),
+  roleContextLabel: $("#roleContextLabel"),
+  leaveAdminLink: $("#leaveAdminLink"),
   preflightStage: $("#preflightStage"),
-  viewSwitcher: $("#viewSwitcher"),
   adminGate: $("#adminGate"),
   adminGateToken: $("#adminGateToken"),
   adminGateButton: $("#adminGateButton"),
   adminGateMessage: $("#adminGateMessage"),
   adminWorkspace: $("#adminWorkspace"),
+  adminNavigation: $("#adminNavigation"),
+  adminDesignSection: $("#adminDesignSection"),
+  adminPublishSection: $("#adminPublishSection"),
+  adminResultsSection: $("#adminResultsSection"),
+  sidebarLifecycleStatus: $("#sidebarLifecycleStatus"),
+  sidebarLifecycleVersion: $("#sidebarLifecycleVersion"),
+  goPublishButton: $("#goPublishButton"),
   activeStage: $("#activeStage"),
   previewTitle: $("#previewTitle"),
   previewDescription: $("#previewDescription"),
@@ -99,8 +110,6 @@ const elements = {
   resultKeywordInput: $("#resultKeywordInput"),
   searchResultsButton: $("#searchResultsButton"),
   exportButton: $("#exportButton"),
-  sheetAdminTokenInput: $("#sheetAdminTokenInput"),
-  connectSheetButton: $("#connectSheetButton"),
   disconnectSheetButton: $("#disconnectSheetButton"),
   resultSourceStatus: $("#resultSourceStatus"),
   resultsBody: $("#resultsBody"),
@@ -125,7 +134,6 @@ async function init() {
   configureAppMode();
   bindEvents();
   const savedToken = sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY) || "";
-  elements.sheetAdminTokenInput.value = savedToken;
   elements.adminGateToken.value = savedToken;
   await checkHealth();
   if (ADMIN_MODE && savedToken) await unlockAdmin(savedToken);
@@ -134,15 +142,14 @@ async function init() {
 
 function configureAppMode() {
   document.body.classList.toggle("admin-mode", ADMIN_MODE);
-  elements.viewSwitcher.classList.add("hidden");
-  $(".eyebrow").textContent = ADMIN_MODE ? "QANDA MANAGEMENT" : "JSON Questionnaire System";
+  elements.productContext.textContent = ADMIN_MODE ? "教師工作台" : "學員作答";
+  elements.roleContextLabel.textContent = ADMIN_MODE ? "教師／管理者" : "學員";
+  elements.leaveAdminLink.classList.toggle("hidden", !ADMIN_MODE);
+  document.title = ADMIN_MODE ? "QANDA｜問卷管理" : "QANDA｜學員作答";
   showView(ADMIN_MODE ? "admin" : "answer");
 }
 
 function bindEvents() {
-  $$(".view-switcher button").forEach((button) => {
-    button.addEventListener("click", () => showView(button.dataset.view));
-  });
   elements.questionnaireSelect.addEventListener("change", handleSurveySelection);
   elements.adminGateButton.addEventListener("click", () => unlockAdmin(elements.adminGateToken.value.trim()));
   elements.adminGateToken.addEventListener("keydown", (event) => {
@@ -156,7 +163,10 @@ function bindEvents() {
   elements.cancelSubmitButton.addEventListener("click", closeSubmitReview);
   elements.confirmSubmitButton.addEventListener("click", submitAnswers);
   elements.restoreDraftButton.addEventListener("click", restoreLocalDraft);
-  elements.adminQuestionnaireSelect.addEventListener("change", loadAdminSurvey);
+  elements.adminQuestionnaireSelect.addEventListener("change", handleAdminSurveySelection);
+  elements.adminNavigation.addEventListener("click", handleAdminNavigation);
+  elements.goPublishButton.addEventListener("click", () => showAdminSection("publish"));
+  elements.jsonEditor.addEventListener("input", handleEditorChange);
   elements.reloadJsonButton.addEventListener("click", loadAdminSurvey);
   elements.saveJsonButton.addEventListener("click", saveAdminSurvey);
   elements.syncQuestionBankButton.addEventListener("click", syncQuestionBank);
@@ -164,13 +174,11 @@ function bindEvents() {
   elements.copyPublishLinkButton.addEventListener("click", () => copyText(elements.publishResultLink.value, elements.jsonMessage));
   elements.openPublishLinkButton.addEventListener("click", () => window.open(elements.publishResultLink.value, "_blank", "noopener"));
   elements.closeCentralButton.addEventListener("click", closeCentralQuestionnaire);
-  elements.lifecycleActions.addEventListener("click", handleLifecycleAction);
   elements.copyShareLinkButton.addEventListener("click", copyShareLink);
   elements.openShareLinkButton.addEventListener("click", openShareLink);
   elements.generateButton.addEventListener("click", generateQuestionnaire);
   elements.searchResultsButton.addEventListener("click", loadResults);
   elements.exportButton.addEventListener("click", exportResults);
-  elements.connectSheetButton.addEventListener("click", connectSheetAdmin);
   elements.disconnectSheetButton.addEventListener("click", disconnectSheetAdmin);
   elements.refreshDashboardButton.addEventListener("click", loadDashboard);
 }
@@ -185,7 +193,6 @@ async function unlockAdmin(token) {
   sessionStorage.setItem(SHEET_ADMIN_TOKEN_KEY, token);
   try {
     const response = await sheetAdminApi("admin.dashboard", { filters: {} });
-    elements.sheetAdminTokenInput.value = token;
     elements.adminGate.classList.add("hidden");
     elements.adminWorkspace.classList.remove("hidden");
     await loadQuestionnaires();
@@ -202,10 +209,48 @@ async function unlockAdmin(token) {
 }
 
 function showView(view) {
-  $$(".view-switcher button").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   $("#answerView").classList.toggle("active", view === "answer");
   $("#adminView").classList.toggle("active", view === "admin");
-  if (view === "admin") Promise.all([loadResults(), loadDashboard()]);
+}
+
+function handleAdminNavigation(event) {
+  const button = event.target.closest("button[data-admin-section]");
+  if (button) showAdminSection(button.dataset.adminSection);
+}
+
+function showAdminSection(section) {
+  state.activeAdminSection = section;
+  $$("[data-admin-section]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.adminSection === section);
+  });
+  $$("[data-admin-panel]").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.adminPanel === section);
+  });
+  if (section === "publish") renderPublishPreview();
+  if (section === "results") {
+    syncResultFiltersToCurrentSurvey();
+    Promise.all([loadResults(), loadDashboard()]);
+  }
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+async function handleAdminSurveySelection() {
+  state.hasUnpublishedDraft = false;
+  await loadAdminSurvey();
+  syncResultFiltersToCurrentSurvey();
+  if (state.activeAdminSection === "results") await Promise.all([loadResults(), loadDashboard()]);
+}
+
+function syncResultFiltersToCurrentSurvey() {
+  const questionnaireId = elements.adminQuestionnaireSelect.value;
+  if (!questionnaireId) return;
+  elements.resultQuestionnaireFilter.value = questionnaireId;
+  elements.dashboardQuestionnaireFilter.value = questionnaireId;
+}
+
+function handleEditorChange() {
+  state.hasUnpublishedDraft = true;
+  if (state.activeAdminSection === "publish") renderPublishPreview();
 }
 
 async function checkHealth() {
@@ -236,13 +281,17 @@ async function loadQuestionnaires(preferredAdminId = "") {
   const selectedAdminId = [previousAdminId, directSurveyId, state.adminQuestionnaires[0]?.id]
     .find((id) => id && state.adminQuestionnaires.some((item) => item.id === id));
   if (selectedAdminId) elements.adminQuestionnaireSelect.value = selectedAdminId;
-  elements.directLinkHint.classList.toggle("hidden", !directSurveyId || directSurveyId !== selectedSurveyId);
+  const hasAssignedSurvey = Boolean(directSurveyId && directSurveyId === selectedSurveyId);
+  elements.questionnaireSelect.disabled = hasAssignedSurvey;
+  elements.directLinkHint.classList.toggle("hidden", !hasAssignedSurvey);
   renderSurveyPreview();
 }
 
 function fillSelect(select, items, includeLifecycle = false) {
   select.innerHTML = items.map((item) => {
-    const suffix = includeLifecycle ? ` · ${lifecycleLabel(item.lifecycle?.status || "published")}` : "";
+    const lifecycle = lifecycleLabel(item.lifecycle?.status || "published");
+    const draft = item.hasLocalDraft ? "／有草稿" : "";
+    const suffix = includeLifecycle ? ` · ${lifecycle}${draft}` : "";
     return `<option value="${escapeHtml(item.id)}">${escapeHtml(item.title + suffix)}</option>`;
   }).join("");
 }
@@ -813,11 +862,17 @@ function draftKey() {
 async function loadAdminSurvey() {
   if (!elements.adminQuestionnaireSelect.value) return;
   try {
-    const data = await api(`/api/questionnaires/${elements.adminQuestionnaireSelect.value}`);
+    const data = await api(`/api/questionnaires/${elements.adminQuestionnaireSelect.value}?scope=admin`);
     state.adminSurvey = data.questionnaire;
+    const summary = currentAdminSurveySummary(data.questionnaire.id);
+    state.hasUnpublishedDraft = Boolean(data.draft || summary?.hasLocalDraft);
     elements.jsonEditor.value = JSON.stringify(data.questionnaire, null, 2);
     renderLifecycle(data.questionnaire);
-    setMessage(elements.jsonMessage, "已載入問卷。", "success");
+    setMessage(
+      elements.jsonMessage,
+      state.hasUnpublishedDraft ? "已載入瀏覽器草稿；學員仍使用目前雲端版本。" : "已載入目前版本。",
+      "success"
+    );
   } catch (error) {
     setMessage(elements.jsonMessage, error.message, "error");
   }
@@ -827,84 +882,121 @@ async function saveAdminSurvey() {
   try {
     const questionnaire = JSON.parse(elements.jsonEditor.value);
     const data = await api("/api/questionnaires", { method: "POST", body: { questionnaire } });
-    setMessage(elements.jsonMessage, `已儲存 ${data.questionnaire.title}`, "success");
+    state.hasUnpublishedDraft = true;
+    setMessage(elements.jsonMessage, `已儲存「${data.questionnaire.title}」草稿；學員版本尚未變更。`, "success");
     await loadQuestionnaires(data.questionnaire.id);
-    await loadAdminSurvey();
+    state.adminSurvey = data.questionnaire;
+    elements.jsonEditor.value = JSON.stringify(data.questionnaire, null, 2);
+    renderLifecycle(data.questionnaire);
   } catch (error) {
     setMessage(elements.jsonMessage, error.message, "error");
   }
 }
 
 function renderLifecycle(questionnaire) {
-  const lifecycle = questionnaire.lifecycle || { status: "published", version: 1, audit: [] };
+  const summary = currentAdminSurveySummary(questionnaire.id);
+  const lifecycle = summary?.lifecycle || questionnaire.lifecycle || { status: "draft", version: 1, audit: [] };
   const status = lifecycle.status || "published";
-  const stages = ["draft", "review", "published", "closed", "archived"];
-  const activeIndex = stages.indexOf(status);
+  const hasPublishedRelease = summary?.hasPublishedRelease ?? ["published", "closed", "archived"].includes(status);
+  const isPublished = status === "published";
+  const stages = [
+    { label: "內容準備", complete: true },
+    { label: "建立版本", complete: isPublished && !state.hasUnpublishedDraft },
+    { label: "交付連結", active: isPublished && !state.hasUnpublishedDraft },
+    { label: "查看結果" }
+  ];
+  const displayStatus = state.hasUnpublishedDraft ? "待發布" : lifecycleLabel(status);
+  const displayClass = state.hasUnpublishedDraft ? "review" : status;
   elements.lifecycleTitle.textContent = questionnaire.title;
-  elements.lifecycleStatus.textContent = lifecycleLabel(status);
-  elements.lifecycleStatus.className = `status lifecycle-${status}`;
-  elements.lifecycleVersion.textContent = `第 ${Number(lifecycle.version || 1)} 版`;
+  elements.lifecycleStatus.textContent = displayStatus;
+  elements.lifecycleStatus.className = `status lifecycle-${displayClass}`;
+  const versionLabel = hasPublishedRelease ? `雲端第 ${Number(lifecycle.version || 1)} 版` : "尚未發布";
+  elements.lifecycleVersion.textContent = versionLabel;
+  elements.sidebarLifecycleStatus.textContent = displayStatus;
+  elements.sidebarLifecycleStatus.className = `status lifecycle-${displayClass}`;
+  elements.sidebarLifecycleVersion.textContent = versionLabel;
   elements.lifecycleTrail.innerHTML = stages.map((stage, index) => `
-    <li class="${index < activeIndex ? "complete" : ""} ${stage === status ? "active" : ""}">
+    <li class="${stage.complete ? "complete" : ""} ${stage.active ? "active" : ""}">
       <span>${index + 1}</span>
-      <strong>${escapeHtml(lifecycleLabel(stage))}</strong>
+      <strong>${escapeHtml(stage.label)}</strong>
     </li>`).join("");
 
   const shareUrl = buildShareUrl(questionnaire.id);
   elements.shareLinkInput.value = shareUrl;
-  elements.copyShareLinkButton.disabled = status !== "published";
-  elements.openShareLinkButton.disabled = status !== "published";
-  const audit = Array.isArray(lifecycle.audit) ? lifecycle.audit : [];
-  const latest = audit.at(-1);
+  elements.copyShareLinkButton.disabled = !isPublished;
+  elements.openShareLinkButton.disabled = !isPublished;
+  elements.closeCentralButton.disabled = !isPublished;
+  elements.publishCentralButton.disabled = false;
+  elements.publishCentralButton.textContent = isPublished ? "發布更新版本" : "發布給學員";
+  const questionCount = countSurveyQuestions(questionnaire.questions || []);
+  const durationMinutes = Math.ceil(Number(questionnaire.durationSeconds || 0) / 60);
   elements.lifecycleMeta.innerHTML = `
-    <span>負責人 <strong>${escapeHtml(lifecycle.owner || "未指定")}</strong></span>
-    <span>更新 <strong>${escapeHtml(formatTime(lifecycle.updatedAt || lifecycle.createdAt))}</strong></span>
-    <span>稽核 <strong>${audit.length} 筆${latest?.actor ? ` · ${escapeHtml(latest.actor)}` : ""}</strong></span>`;
-  elements.lifecycleActions.innerHTML = lifecycleTransitions(status).map((action) => `
-    <button type="button" data-lifecycle-status="${escapeHtml(action.status)}" class="${action.primary ? "primary" : ""}">
-      ${escapeHtml(action.label)}
-    </button>`).join("");
-  setMessage(elements.lifecycleMessage, status === "published" ? "問卷已開放，作答者可透過獨立連結進入。" : "此狀態不接受新的作答。", status === "published" ? "success" : "");
+    <span><small>題目</small><strong>${questionCount} 題</strong></span>
+    <span><small>時間</small><strong>${durationMinutes} 分鐘</strong></span>
+    <span><small>作答辨識</small><strong>姓名＋考卷</strong></span>
+    <span><small>更新方式</small><strong>原連結建立新版</strong></span>`;
+  const message = state.hasUnpublishedDraft
+    ? "草稿尚未發布；學員仍會使用上一個中央版本。"
+    : isPublished
+      ? "目前版本已開放作答，可直接複製固定連結交付學員。"
+      : "目前未開放新作答；確認內容後即可重新發布。";
+  setMessage(elements.lifecycleMessage, message, isPublished && !state.hasUnpublishedDraft ? "success" : "");
 }
 
-function lifecycleTransitions(status) {
-  return {
-    draft: [{ status: "review", label: "送交審核", primary: true }],
-    review: [
-      { status: "draft", label: "退回草稿" },
-      { status: "published", label: "核准發布", primary: true }
-    ],
-    published: [{ status: "closed", label: "關閉作答" }],
-    closed: [
-      { status: "published", label: "重新開放", primary: true },
-      { status: "archived", label: "封存問卷" }
-    ],
-    archived: [{ status: "closed", label: "取消封存" }]
-  }[status] || [];
+function currentAdminSurveySummary(questionnaireId) {
+  return state.adminQuestionnaires.find((item) => item.id === questionnaireId) || null;
 }
 
-async function handleLifecycleAction(event) {
-  const button = event.target.closest("button[data-lifecycle-status]");
-  if (!button || !state.adminSurvey) return;
-  const nextStatus = button.dataset.lifecycleStatus;
-  if (["closed", "archived"].includes(nextStatus) && !window.confirm(`確定要${lifecycleLabel(nextStatus)}「${state.adminSurvey.title}」嗎？`)) return;
-  button.disabled = true;
-  setMessage(elements.lifecycleMessage, "正在更新問卷狀態");
-  try {
-    const data = await api(`/api/questionnaires/${state.adminSurvey.id}/lifecycle`, {
-      method: "PATCH",
-      body: {
-        status: nextStatus,
-        actor: "questionnaire-admin",
-        note: `管理端變更為${lifecycleLabel(nextStatus)}`
-      }
-    });
-    await loadQuestionnaires(data.questionnaire.id);
-    await loadAdminSurvey();
-  } catch (error) {
-    setMessage(elements.lifecycleMessage, error.message, "error");
-    button.disabled = false;
+function applyReleaseState(questionnaire) {
+  const lifecycle = questionnaire.lifecycle || { status: "draft", version: 1 };
+  const summary = {
+    id: questionnaire.id,
+    title: questionnaire.title,
+    description: questionnaire.description || "",
+    durationSeconds: questionnaire.durationSeconds,
+    questionCount: countSurveyQuestions(questionnaire.questions || []),
+    rosterCount: Array.isArray(questionnaire.accessRoster) ? questionnaire.accessRoster.length : 0,
+    lifecycle,
+    hasLocalDraft: false,
+    hasPublishedRelease: true
+  };
+  const adminIndex = state.adminQuestionnaires.findIndex((item) => item.id === questionnaire.id);
+  if (adminIndex >= 0) state.adminQuestionnaires[adminIndex] = summary;
+  else state.adminQuestionnaires.push(summary);
+
+  const publicIndex = state.questionnaires.findIndex((item) => item.id === questionnaire.id);
+  if (lifecycle.status === "published") {
+    if (publicIndex >= 0) state.questionnaires[publicIndex] = summary;
+    else state.questionnaires.push(summary);
+  } else if (publicIndex >= 0) {
+    state.questionnaires.splice(publicIndex, 1);
   }
+
+  fillSelect(elements.adminQuestionnaireSelect, state.adminQuestionnaires, true);
+  elements.adminQuestionnaireSelect.value = questionnaire.id;
+  fillSelect(elements.questionnaireSelect, state.questionnaires);
+  window.__STATIC_API__?.clearSurveyDraft?.(questionnaire.id);
+  window.__STATIC_API__?.updatePublishedSurvey?.(questionnaire);
+}
+
+function renderPublishPreview() {
+  try {
+    const questionnaire = JSON.parse(elements.jsonEditor.value);
+    renderLifecycle(questionnaire);
+  } catch (error) {
+    elements.lifecycleTitle.textContent = "題卷內容需要修正";
+    elements.lifecycleStatus.textContent = "格式錯誤";
+    elements.lifecycleStatus.className = "status lifecycle-closed";
+    elements.publishCentralButton.disabled = true;
+    setMessage(elements.lifecycleMessage, `JSON 格式錯誤：${error.message}`, "error");
+  }
+}
+
+function countSurveyQuestions(questions) {
+  return questions.reduce((total, question) => {
+    if (question.type === "composite") return total + countSurveyQuestions(question.questions || []);
+    return total + 1;
+  }, 0);
 }
 
 function buildShareUrl(questionnaireId) {
@@ -963,6 +1055,9 @@ async function generateQuestionnaire() {
       }
     });
     elements.jsonEditor.value = JSON.stringify(data.questionnaire, null, 2);
+    state.adminSurvey = data.questionnaire;
+    state.hasUnpublishedDraft = true;
+    renderLifecycle(data.questionnaire);
     setMessage(
       elements.aiMessage,
       data.validationErrors?.length
@@ -970,7 +1065,6 @@ async function generateQuestionnaire() {
         : `已產生草稿，provider: ${data.provider}`,
       data.validationErrors?.length ? "error" : "success"
     );
-    showView("admin");
   } catch (error) {
     setMessage(elements.aiMessage, error.message, "error");
   } finally {
@@ -1011,8 +1105,8 @@ async function loadResults() {
     state.resultSource = "local";
     state.remoteResults = [];
     elements.resultSourceStatus.textContent = configuredSheetEndpoint()
-      ? "目前顯示本機結果；輸入管理權杖可讀取集中結果"
-      : "Google Sheet 尚未設定；目前顯示本機結果";
+      ? "集中結果暫時無法讀取"
+      : "集中資料服務尚未設定";
     elements.resultSourceStatus.className = "source-status";
   }
   elements.resultsBody.innerHTML = data.results.length
@@ -1066,20 +1160,8 @@ function exportResults() {
   window.location.href = `/api/results/export.csv?${params}`;
 }
 
-async function connectSheetAdmin() {
-  const token = elements.sheetAdminTokenInput.value.trim();
-  if (!token) {
-    elements.resultSourceStatus.textContent = "請輸入管理權杖";
-    elements.resultSourceStatus.className = "source-status error";
-    return;
-  }
-  sessionStorage.setItem(SHEET_ADMIN_TOKEN_KEY, token);
-  await Promise.all([loadResults(), loadDashboard()]);
-}
-
 async function disconnectSheetAdmin() {
   sessionStorage.removeItem(SHEET_ADMIN_TOKEN_KEY);
-  elements.sheetAdminTokenInput.value = "";
   elements.adminGateToken.value = "";
   elements.adminWorkspace.classList.add("hidden");
   elements.adminGate.classList.remove("hidden");
@@ -1089,7 +1171,7 @@ async function disconnectSheetAdmin() {
 async function syncQuestionBank() {
   if (!state.adminSurvey) return;
   if (!sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY)) {
-    setMessage(elements.jsonMessage, "請先在結果搜尋區連線 Google Sheet。", "error");
+    setMessage(elements.jsonMessage, "管理登入已失效，請重新登入。", "error");
     return;
   }
   elements.syncQuestionBankButton.disabled = true;
@@ -1107,7 +1189,7 @@ async function syncQuestionBank() {
 
 async function publishCentralQuestionnaire() {
   if (!sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY)) {
-    setMessage(elements.jsonMessage, "請先連線 Google Sheet。", "error");
+    setMessage(elements.jsonMessage, "管理登入已失效，請重新登入。", "error");
     return;
   }
   let questionnaire;
@@ -1127,7 +1209,21 @@ async function publishCentralQuestionnaire() {
     const release = response.data;
     const action = release.reused ? "內容未變更，維持" : "已建立";
     setMessage(elements.jsonMessage, `${action}第 ${release.version} 版。`, "success");
-    elements.shareLinkInput.value = buildShareUrl(questionnaire.id);
+    const publishedAt = release.publishedAt || new Date().toISOString();
+    state.hasUnpublishedDraft = false;
+    state.adminSurvey = {
+      ...questionnaire,
+      lifecycle: {
+        ...(questionnaire.lifecycle || {}),
+        status: "published",
+        version: release.version,
+        publishedAt,
+        updatedAt: publishedAt
+      }
+    };
+    applyReleaseState(state.adminSurvey);
+    elements.jsonEditor.value = JSON.stringify(state.adminSurvey, null, 2);
+    renderLifecycle(state.adminSurvey);
     showPublishedLink(questionnaire, release.version);
   } catch (error) {
     setMessage(elements.jsonMessage, error.message, "error");
@@ -1139,7 +1235,7 @@ async function publishCentralQuestionnaire() {
 async function closeCentralQuestionnaire() {
   const questionnaireId = state.adminSurvey?.id;
   if (!questionnaireId || !sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY)) {
-    setMessage(elements.jsonMessage, "請先載入問卷並連線 Google Sheet。", "error");
+    setMessage(elements.jsonMessage, "請先載入問卷並確認管理登入。", "error");
     return;
   }
   if (!window.confirm(`確定停止「${state.adminSurvey.title}」的中央發布嗎？`)) return;
@@ -1147,6 +1243,19 @@ async function closeCentralQuestionnaire() {
   try {
     const response = await sheetAdminApi("admin.questionnaire.close", { questionnaireId });
     setMessage(elements.jsonMessage, `第 ${response.data.version} 版已停止接受新作答。`, "success");
+    state.adminSurvey = {
+      ...state.adminSurvey,
+      lifecycle: {
+        ...(state.adminSurvey.lifecycle || {}),
+        status: "closed",
+        version: response.data.version,
+        updatedAt: new Date().toISOString()
+      }
+    };
+    state.hasUnpublishedDraft = false;
+    applyReleaseState(state.adminSurvey);
+    elements.jsonEditor.value = JSON.stringify(state.adminSurvey, null, 2);
+    renderLifecycle(state.adminSurvey);
   } catch (error) {
     setMessage(elements.jsonMessage, error.message, "error");
   } finally {
@@ -1157,7 +1266,7 @@ async function closeCentralQuestionnaire() {
 async function loadDashboard() {
   const token = sessionStorage.getItem(SHEET_ADMIN_TOKEN_KEY);
   if (!configuredSheetEndpoint() || !token) {
-    elements.dashboardEmpty.textContent = "連線 Google Sheet 後顯示集中報表。";
+    elements.dashboardEmpty.textContent = "管理登入已失效，請重新登入。";
     elements.dashboardEmpty.classList.remove("hidden");
     elements.dashboardContent.classList.add("hidden");
     return;

@@ -9,13 +9,17 @@
   <body>
     <header class="topbar">
       <div>
-        <p class="eyebrow">JSON Questionnaire System</p>
-        <h1>問答自我判斷</h1>
+        <p id="productContext" class="eyebrow">學員作答</p>
+        <h1>QANDA</h1>
       </div>
-      <nav id="viewSwitcher" class="view-switcher" aria-label="主要功能">
-        <button class="active" data-view="answer" type="button">作答</button>
-        <button data-view="admin" type="button">管理</button>
-      </nav>
+      <div class="role-context" aria-label="目前使用身分">
+        <span class="role-context-dot" aria-hidden="true"></span>
+        <div>
+          <small>目前身分</small>
+          <strong id="roleContextLabel">學員</strong>
+        </div>
+        <a id="leaveAdminLink" class="leave-admin-link hidden" href="./">離開管理</a>
+      </div>
     </header>
 
     <main>
@@ -74,10 +78,7 @@
               姓名
               <input id="displayNameInput" autocomplete="name" placeholder="請輸入姓名" />
             </label>
-            <label>
-              班級（選填）
-              <input id="groupInput" autocomplete="organization" placeholder="例如：AI 協作後端 A 班" />
-            </label>
+            <input id="groupInput" type="hidden" value="" />
             <button id="startButton" class="primary start-button" type="button">開始作答</button>
             <p class="start-note">按下開始後將立即倒數。</p>
             <div id="accessMessage" class="message" role="status" aria-live="polite"></div>
@@ -148,98 +149,183 @@
 
       <section id="adminView" class="view">
         <section id="adminGate" class="admin-gate">
-          <small>QANDA MANAGEMENT</small>
-          <h2>管理中心</h2>
-          <p>驗證管理權杖後，才會載入問卷、答案與學習報表。</p>
+          <small>教師專用入口</small>
+          <h2>進入問卷管理</h2>
+          <p>登入後可依序完成題卷設計、發布交付與成效查看。</p>
           <div>
             <input id="adminGateToken" type="password" autocomplete="off" placeholder="管理權杖" aria-label="管理權杖" />
-            <button id="adminGateButton" class="primary" type="button">進入管理中心</button>
+            <button id="adminGateButton" class="primary" type="button">登入</button>
           </div>
           <div id="adminGateMessage" class="message" role="status"></div>
         </section>
-        <div id="adminWorkspace" class="admin-grid hidden">
-          <section class="admin-panel lifecycle-panel">
-            <div class="panel-title">
-              <div>
-                <small class="step-indicator">問卷治理</small>
-                <span id="lifecycleTitle">問卷生命週期</span>
-              </div>
-              <div class="lifecycle-heading-meta">
-                <span id="lifecycleStatus" class="status">--</span>
-                <small id="lifecycleVersion">第 -- 版</small>
-              </div>
-            </div>
-            <ol id="lifecycleTrail" class="lifecycle-trail" aria-label="問卷生命週期"></ol>
-            <div class="distribution-row">
-              <label>
-                獨立作答連結
-                <input id="shareLinkInput" readonly />
-              </label>
-              <div class="distribution-actions">
-                <button id="copyShareLinkButton" type="button">複製連結</button>
-                <button id="openShareLinkButton" type="button">開啟作答頁</button>
-              </div>
-            </div>
-            <div class="lifecycle-footer">
-              <div id="lifecycleMeta" class="lifecycle-meta"></div>
-              <div id="lifecycleActions" class="admin-actions"></div>
-            </div>
-            <div id="lifecycleMessage" class="message" role="status" aria-live="polite"></div>
-          </section>
-
-          <section class="admin-panel json-panel">
-            <div class="panel-title">
-              <span>問卷 JSON</span>
+        <div id="adminWorkspace" class="admin-shell hidden">
+          <aside class="admin-sidebar">
+            <div class="admin-survey-context">
+              <label for="adminQuestionnaireSelect">目前管理的考卷</label>
               <select id="adminQuestionnaireSelect"></select>
-            </div>
-            <textarea id="jsonEditor" spellcheck="false"></textarea>
-            <div class="admin-actions">
-              <button id="reloadJsonButton" type="button">重新載入</button>
-              <button id="syncQuestionBankButton" type="button">同步至題庫</button>
-              <button id="closeCentralButton" type="button">停止中央發布</button>
-              <button id="publishCentralButton" class="primary" type="button">發布給學員</button>
-              <button id="saveJsonButton" type="button">暫存於本機</button>
-            </div>
-            <div id="jsonMessage" class="message"></div>
-            <div id="publishResult" class="publish-result hidden">
-              <div>
-                <small>學員作答連結</small>
-                <strong id="publishResultTitle">問卷已發布</strong>
-              </div>
-              <div class="publish-link-row">
-                <input id="publishResultLink" readonly aria-label="學員作答連結" />
-                <button id="copyPublishLinkButton" type="button">複製</button>
-                <button id="openPublishLinkButton" type="button">開啟</button>
+              <div class="admin-survey-state">
+                <span id="sidebarLifecycleStatus" class="status">--</span>
+                <small id="sidebarLifecycleVersion">第 -- 版</small>
               </div>
             </div>
-          </section>
-
-          <section class="admin-panel ai-panel">
-            <div class="panel-title">
-              <span>AI 出卷</span>
-              <small id="aiProviderLabel">fallback 可用</small>
+            <nav id="adminNavigation" class="admin-navigation" aria-label="問卷管理流程">
+              <button class="active" data-admin-section="design" type="button">
+                <span>1</span>
+                <strong>設計題卷</strong>
+                <small>建立或修改內容</small>
+              </button>
+              <button data-admin-section="publish" type="button">
+                <span>2</span>
+                <strong>發布交付</strong>
+                <small>產生學員連結</small>
+              </button>
+              <button data-admin-section="results" type="button">
+                <span>3</span>
+                <strong>查看成效</strong>
+                <small>分析與匯出結果</small>
+              </button>
+            </nav>
+            <div class="admin-sidebar-footer">
+              <p>更新題卷後重新發布，學員連結不變，既有作答仍保留原版本。</p>
+              <button id="disconnectSheetButton" type="button">登出管理</button>
             </div>
-            <label>
-              問卷標題
-              <input id="aiTitleInput" value="AI 生成問卷" />
-            </label>
-            <label>
-              限制分鐘
-              <input id="aiDurationInput" type="number" min="1" max="240" value="15" />
-            </label>
-            <label>
-              出卷需求
-              <textarea id="aiPromptInput">設計一份評估使用者能否理解問答系統、資料記憶與 AI 改卷流程的問卷。</textarea>
-            </label>
-            <button id="generateButton" class="primary" type="button">產生草稿</button>
-            <div id="aiMessage" class="message"></div>
-          </section>
+          </aside>
 
-          <section class="admin-panel dashboard-panel">
+          <div class="admin-content">
+            <section id="adminDesignSection" class="admin-section active" data-admin-panel="design">
+              <header class="admin-section-heading">
+                <div>
+                  <small>階段 1 / 3</small>
+                  <h2>設計題卷</h2>
+                  <p>建立新題卷或修改目前版本；此處的變更尚不會影響學員。</p>
+                </div>
+                <button id="goPublishButton" class="primary" type="button">下一步：檢查並發布</button>
+              </header>
+
+              <div class="design-workspace">
+                <section class="admin-panel json-panel">
+                  <div class="panel-title">
+                    <div>
+                      <small class="step-indicator">題卷內容</small>
+                      <span>JSON 編輯器</span>
+                    </div>
+                    <button id="reloadJsonButton" type="button">還原目前版本</button>
+                  </div>
+                  <textarea id="jsonEditor" spellcheck="false" aria-label="問卷 JSON"></textarea>
+                  <div class="admin-actions">
+                    <button id="saveJsonButton" class="primary" type="button">儲存瀏覽器草稿</button>
+                  </div>
+                  <p class="field-note">草稿只保存在目前瀏覽器；完成檢查並發布後，學員才會看到新版。</p>
+                  <div id="jsonMessage" class="message"></div>
+                  <details class="advanced-maintenance">
+                    <summary>進階題庫維護</summary>
+                    <p>正常發布會自動同步題庫；僅在資料修復時才需要手動重建。</p>
+                    <button id="syncQuestionBankButton" type="button">重新同步目前題卷</button>
+                  </details>
+                </section>
+
+                <section class="admin-panel ai-panel">
+                  <div class="panel-title">
+                    <div>
+                      <small class="step-indicator">建立草稿</small>
+                      <span>AI 出卷助手</span>
+                    </div>
+                    <small id="aiProviderLabel">fallback 可用</small>
+                  </div>
+                  <label>
+                    問卷標題
+                    <input id="aiTitleInput" value="AI 生成問卷" />
+                  </label>
+                  <label>
+                    限制分鐘
+                    <input id="aiDurationInput" type="number" min="1" max="240" value="15" />
+                  </label>
+                  <label>
+                    出卷需求
+                    <textarea id="aiPromptInput">設計一份評估使用者能否理解問答系統、資料記憶與 AI 改卷流程的問卷。</textarea>
+                  </label>
+                  <button id="generateButton" type="button">產生草稿並帶入編輯器</button>
+                  <div id="aiMessage" class="message"></div>
+                </section>
+              </div>
+            </section>
+
+            <section id="adminPublishSection" class="admin-section" data-admin-panel="publish">
+              <header class="admin-section-heading">
+                <div>
+                  <small>階段 2 / 3</small>
+                  <h2>發布與交付</h2>
+                  <p>確認內容後建立中央版本，再將固定連結交給學員。</p>
+                </div>
+              </header>
+
+              <section class="admin-panel lifecycle-panel">
+                <div class="panel-title">
+                  <div>
+                    <small class="step-indicator">發布檢查</small>
+                    <span id="lifecycleTitle">目前題卷</span>
+                  </div>
+                  <div class="lifecycle-heading-meta">
+                    <span id="lifecycleStatus" class="status">--</span>
+                    <small id="lifecycleVersion">第 -- 版</small>
+                  </div>
+                </div>
+                <ol id="lifecycleTrail" class="lifecycle-trail" aria-label="發布流程"></ol>
+                <div id="lifecycleMeta" class="release-checks"></div>
+                <div class="release-actions">
+                  <button id="publishCentralButton" class="primary" type="button">發布給學員</button>
+                  <button id="closeCentralButton" type="button">停止接受新作答</button>
+                </div>
+                <div id="lifecycleActions" class="hidden"></div>
+                <div id="lifecycleMessage" class="message" role="status" aria-live="polite"></div>
+              </section>
+
+              <section class="admin-panel delivery-panel">
+                <div class="panel-title">
+                  <div>
+                    <small class="step-indicator">學員交付</small>
+                    <span>固定作答連結</span>
+                  </div>
+                </div>
+                <p class="delivery-note">同一份考卷更新版本時不必重新發連結；新開啟的作答會使用最新發布版本。</p>
+                <div class="distribution-row">
+                  <label>
+                    學員作答連結
+                    <input id="shareLinkInput" readonly />
+                  </label>
+                  <div class="distribution-actions">
+                    <button id="copyShareLinkButton" type="button">複製連結</button>
+                    <button id="openShareLinkButton" type="button">以學員身分預覽</button>
+                  </div>
+                </div>
+                <div id="publishResult" class="publish-result hidden">
+                  <div>
+                    <small>發布完成</small>
+                    <strong id="publishResultTitle">問卷已發布</strong>
+                  </div>
+                  <div class="publish-link-row">
+                    <input id="publishResultLink" readonly aria-label="學員作答連結" />
+                    <button id="copyPublishLinkButton" type="button">複製</button>
+                    <button id="openPublishLinkButton" type="button">預覽</button>
+                  </div>
+                </div>
+              </section>
+            </section>
+
+            <section id="adminResultsSection" class="admin-section" data-admin-panel="results">
+              <header class="admin-section-heading">
+                <div>
+                  <small>階段 3 / 3</small>
+                  <h2>查看學習成效</h2>
+                  <p>先掌握整體表現，再向下搜尋個別作答與匯出資料。</p>
+                </div>
+              </header>
+
+              <section class="admin-panel dashboard-panel">
             <div class="panel-title dashboard-title">
               <div>
-                <small class="step-indicator">學習成效</small>
-                <span>學習成效總覽</span>
+                <small class="step-indicator">整體判讀</small>
+                <span>班級成效總覽</span>
               </div>
               <div class="dashboard-filters">
                 <select id="dashboardQuestionnaireFilter" aria-label="Dashboard 問卷"></select>
@@ -247,7 +333,7 @@
                 <button id="refreshDashboardButton" type="button">更新報表</button>
               </div>
             </div>
-            <div id="dashboardEmpty" class="dashboard-empty">連線 Google Sheet 後顯示集中報表。</div>
+            <div id="dashboardEmpty" class="dashboard-empty">正在取得集中報表。</div>
             <div id="dashboardContent" class="dashboard-content hidden">
               <div id="dashboardKpis" class="dashboard-kpis"></div>
               <div class="dashboard-brief">
@@ -276,22 +362,17 @@
                 </section>
               </div>
             </div>
-          </section>
+              </section>
 
-          <section class="admin-panel results-panel">
+              <section class="admin-panel results-panel">
             <div class="panel-title">
-              <span>結果搜尋</span>
+              <div>
+                <small class="step-indicator">個別作答</small>
+                <span>搜尋與匯出</span>
+              </div>
               <button id="exportButton" type="button">匯出 CSV</button>
             </div>
-            <div class="sheet-admin-connect">
-              <label>
-                管理權杖
-                <input id="sheetAdminTokenInput" type="password" autocomplete="off" placeholder="只保留於目前分頁" />
-              </label>
-              <button id="connectSheetButton" type="button">連線 Google Sheet</button>
-              <button id="disconnectSheetButton" type="button">中斷</button>
-              <span id="resultSourceStatus" class="source-status">目前顯示本機結果</span>
-            </div>
+            <span id="resultSourceStatus" class="source-status">正在取得集中結果</span>
             <div class="filters">
               <select id="resultQuestionnaireFilter"></select>
               <select id="resultStatusFilter">
@@ -318,7 +399,9 @@
               </table>
             </div>
             <div id="resultDetail" class="result-detail"></div>
-          </section>
+              </section>
+            </section>
+          </div>
         </div>
       </section>
     </main>

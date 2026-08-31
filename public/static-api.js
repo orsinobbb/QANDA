@@ -5,11 +5,14 @@
   const staticState = {
     builtIn: null,
     central: null,
-    surveys: null
+    published: null
   };
 
   window.__STATIC_API__ = {
-    exportResults
+    clearSurveyDraft,
+    exportResults,
+    refreshPublishedSurveys,
+    updatePublishedSurvey
   };
 
   window.fetch = async (input, options = {}) => {
@@ -35,8 +38,13 @@
     }
 
     if (method === "GET" && apiPath === "/api/questionnaires") {
-      const surveys = await listSurveys();
-      const visibleSurveys = url.searchParams.get("scope") === "admin" ? surveys : surveys.filter(isSurveyPublished);
+      const adminScope = url.searchParams.get("scope") === "admin";
+      const surveys = await listSurveys(adminScope);
+      const saved = adminScope ? readJson(surveyKey, {}) : {};
+      const publishedIds = adminScope
+        ? new Set((await listSurveys(false)).map((survey) => survey.id))
+        : new Set();
+      const visibleSurveys = adminScope ? surveys : surveys.filter(isSurveyPublished);
       return {
         questionnaires: visibleSurveys.map((survey) => ({
           id: survey.id,
@@ -45,32 +53,41 @@
           durationSeconds: survey.durationSeconds,
           questionCount: countQuestions(survey.questions),
           rosterCount: Array.isArray(survey.accessRoster) ? survey.accessRoster.length : 0,
-          lifecycle: survey.lifecycle || { status: "published", version: 1 }
+          lifecycle: survey.lifecycle || { status: "published", version: 1 },
+          hasLocalDraft: Boolean(saved[survey.id]),
+          hasPublishedRelease: publishedIds.has(survey.id)
         }))
       };
     }
 
     if (segments[1] === "questionnaires" && segments[2]) {
-      if (method === "GET") return { questionnaire: await requireSurvey(segments[2]) };
+      if (method === "GET") {
+        const adminScope = url.searchParams.get("scope") === "admin";
+        const saved = adminScope ? readJson(surveyKey, {}) : {};
+        return {
+          questionnaire: await requireSurvey(segments[2], adminScope),
+          draft: Boolean(saved[segments[2]])
+        };
+      }
     }
 
     if (method === "POST" && apiPath === "/api/questionnaires") {
       const survey = body.questionnaire || body;
-      const existing = (await listSurveys()).find((item) => item.id === survey.id) || null;
+      const existing = (await listSurveys(true)).find((item) => item.id === survey.id) || null;
       const prepared = prepareSurveyForSave(survey, existing);
       saveSurvey(prepared);
-      return { questionnaire: prepared };
+      return { questionnaire: prepared, draft: true };
     }
 
     if (method === "PATCH" && segments[1] === "questionnaires" && segments[2] && segments[3] === "lifecycle") {
-      const survey = await requireSurvey(segments[2]);
+      const survey = await requireSurvey(segments[2], true);
       const transitioned = transitionSurveyLifecycle(survey, body.status, body);
       saveSurvey(transitioned);
       return { questionnaire: transitioned };
     }
 
     if (method === "POST" && apiPath === "/api/sessions/start") {
-      const survey = await requireSurvey(body.questionnaireId);
+      const survey = await requireSurvey(body.questionnaireId, false);
       if (!isSurveyPublished(survey)) throw httpError(409, "此問卷目前未開放作答。");
       const participant = resolveParticipant(survey, body);
       const existing = getSessions().find(
@@ -172,16 +189,43 @@
     }
   }
 
-  async function listSurveys() {
-    if (staticState.surveys) return staticState.surveys;
-    const [builtIn, central] = await Promise.all([loadBuiltInSurveys(), loadCentralSurveys()]);
+  async function listSurveys(includeDrafts = false) {
+    if (!staticState.published) {
+      const [builtIn, central] = await Promise.all([loadBuiltInSurveys(), loadCentralSurveys()]);
+      staticState.published = mergeById([...builtIn, ...central]);
+    }
+    if (!includeDrafts) return staticState.published;
     const saved = Object.values(readJson(surveyKey, {}));
-    staticState.surveys = mergeById([...builtIn, ...central, ...saved]);
-    return staticState.surveys;
+    const publishedById = new Map(staticState.published.map((survey) => [survey.id, survey]));
+    const drafts = saved.map((survey) => {
+      const release = publishedById.get(survey.id);
+      return release
+        ? { ...release, ...survey, lifecycle: release.lifecycle }
+        : survey;
+    });
+    return mergeById([...staticState.published, ...drafts]);
   }
 
-  async function requireSurvey(id) {
-    const survey = (await listSurveys()).find((item) => item.id === id);
+  async function refreshPublishedSurveys() {
+    staticState.central = null;
+    staticState.published = null;
+    return listSurveys(false);
+  }
+
+  function clearSurveyDraft(id) {
+    const saved = readJson(surveyKey, {});
+    if (!saved[id]) return;
+    delete saved[id];
+    writeJson(surveyKey, saved);
+  }
+
+  function updatePublishedSurvey(survey) {
+    if (!survey?.id || !staticState.published) return;
+    staticState.published = mergeById([...staticState.published, structuredClone(survey)]);
+  }
+
+  async function requireSurvey(id, includeDrafts = false) {
+    const survey = (await listSurveys(includeDrafts)).find((item) => item.id === id);
     if (!survey) throw httpError(404, "Questionnaire not found");
     return survey;
   }
@@ -190,7 +234,6 @@
     const saved = readJson(surveyKey, {});
     saved[survey.id] = survey;
     writeJson(surveyKey, saved);
-    staticState.surveys = null;
   }
 
   function surveyLifecycleStatus(survey) {
