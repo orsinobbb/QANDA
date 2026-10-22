@@ -184,6 +184,7 @@ function configureAppMode() {
   elements.productContext.textContent = ADMIN_MODE ? "教師工作台" : "學員作答";
   elements.roleContextLabel.textContent = ADMIN_MODE ? "教師／管理者" : "學員";
   elements.leaveAdminLink.classList.toggle("hidden", !ADMIN_MODE);
+  document.getElementById("classReportLink").href = `./report.html?survey=first-class-profile${ADMIN_MODE ? "&admin=1" : ""}`;
   document.title = ADMIN_MODE ? "QANDA｜問卷管理" : "QANDA｜學員作答";
   showView(ADMIN_MODE ? "admin" : "answer");
 }
@@ -489,12 +490,15 @@ function renderSurveyPreview() {
   if (!survey) return;
   elements.previewTitle.textContent = survey.title;
   elements.previewDescription.textContent = survey.description || "這份問卷將依序引導你完成作答，提交前可檢查所有答案。";
-  elements.previewDuration.textContent = `${Math.ceil(Number(survey.durationSeconds || 0) / 60)} 分鐘`;
+  elements.previewDuration.textContent = survey.mode === "survey" ? `約 ${survey.estimatedMinutes || 3} 分鐘` : `${Math.ceil(Number(survey.durationSeconds || 0) / 60)} 分鐘`;
   elements.previewQuestionCount.textContent = `${Number(survey.questionCount || 0)} 題`;
+  document.getElementById("previewAnswerMode").textContent = survey.mode === "survey" ? "不計分調查" : "限時作答";
+  document.getElementById("participantNameLabel").textContent = survey.mode === "survey" ? "暱稱" : "姓名";
+  elements.displayNameInput.placeholder = survey.mode === "survey" ? "請填班內可辨識的暱稱" : "請輸入姓名";
 }
 
 async function startSession() {
-  setMessage(elements.accessMessage, "準備考卷中");
+  setMessage(elements.accessMessage, "準備問卷中");
   elements.startButton.disabled = true;
   elements.startButton.textContent = "準備中";
   try {
@@ -537,7 +541,7 @@ function renderSession() {
   elements.sidebarParticipant.textContent = participant.displayName;
   elements.sidebarParticipantId.textContent = `${participant.personId}${participant.group ? ` · ${participant.group}` : ""}`;
   setSyncStatus(state.session.memory?.lastSyncAt
-    ? `後端已同步 ${formatTime(state.session.memory.lastSyncAt)}`
+    ? `${window.__STATIC_API__ ? "此裝置已保存" : "後端已同步"} ${formatTime(state.session.memory.lastSyncAt)}`
     : "尚未同步");
   updateProgress();
   if (state.session.result) renderResult(state.session.result, state.session.aiLogs || []);
@@ -614,7 +618,7 @@ function renderQuestion(question, number, nested) {
   const head = `
     <div class="question-head">
       <div class="question-meta">
-        <small>${escapeHtml(number)} · ${escapeHtml(typeLabel)} · ${Number(question.maxScore || childMaxScore(question))} 分</small>
+        <small>${escapeHtml(number)} · ${escapeHtml(typeLabel)}${state.questionnaire.mode === "survey" ? (question.required ? " · 必填" : " · 可略過") : ` · ${Number(question.maxScore || childMaxScore(question))} 分`}</small>
         <span class="question-status" data-question-state="${escapeHtml(question.id)}">未作答</span>
       </div>
       <h2>${escapeHtml(question.title || question.prompt)}</h2>
@@ -791,6 +795,15 @@ function openSubmitReview() {
   const items = flattenQuestionMeta(state.questionnaire.questions);
   const unanswered = items.filter((item) => !isAnswered(state.answers[item.id]));
   const answeredCount = items.length - unanswered.length;
+  if (state.questionnaire.mode === "survey") {
+    const requiredMissing = state.questionnaire.questions.filter(q => q.required && !isAnswered(state.answers[q.id]));
+    elements.submitSummary.textContent = requiredMissing.length ? `還有 ${requiredMissing.length} 題必填題未完成。` : "必填題已完成。縣市與年齡未填不影響送出。";
+    elements.submitReview.innerHTML = requiredMissing.map(q => `<p>${escapeHtml(q.title)}</p>`).join("");
+    elements.confirmSubmitButton.disabled = requiredMissing.length > 0;
+    elements.confirmSubmitButton.textContent = "確認送出調查";
+    elements.submitDialog.showModal();
+    return;
+  }
   elements.submitSummary.textContent = unanswered.length
     ? `已完成 ${answeredCount} 題，還有 ${unanswered.length} 題尚未作答。`
     : `全部 ${items.length} 題都已完成，可以提交。`;
@@ -804,6 +817,7 @@ function openSubmitReview() {
       <span>${unanswered.length ? unanswered.map((item) => item.number).join("、") : "無"}</span>
     </div>`;
   elements.confirmSubmitButton.textContent = unanswered.length ? "仍要確認送出" : "確認送出";
+  elements.confirmSubmitButton.disabled = false;
   elements.submitDialog.showModal();
 }
 
@@ -847,11 +861,11 @@ async function syncSubmittedResult(data) {
     schemaVersion: 1,
     source: window.location.origin,
     sentAt: new Date().toISOString(),
-    session: data.session,
+    session: Object.fromEntries(Object.entries(data.session).filter(([key]) => key !== "questionnaireSnapshot")),
     questionnaire: {
       id: data.questionnaire.id,
       title: data.questionnaire.title,
-      version: Number(data.questionnaire.lifecycle?.version || 1)
+      version: Number(data.session.questionnaireVersion || data.questionnaire.lifecycle?.version || 1)
     },
     answers: data.session.answers || {},
     result: data.session.result,
@@ -867,7 +881,7 @@ async function syncSubmittedResult(data) {
     const response = await fetch(endpoint, request);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const result = await response.json();
-    if (!result.ok) throw new Error(result.error || "Google Sheet 拒絕寫入");
+    if (!result.ok) return `回答已保存在此裝置；雲端拒絕寫入：${result.error || "請聯絡老師"}`;
     return result.duplicate ? "已正式提交；Google Sheet 已有此結果" : "已正式提交並同步 Google Sheet";
   } catch (error) {
     try {
@@ -881,6 +895,16 @@ async function syncSubmittedResult(data) {
 
 function renderResult(result, logs) {
   elements.resultPanel.classList.remove("hidden");
+  if (result.mode === "survey") {
+    const rows = state.questionnaire.questions.map(question => {
+      const raw = state.answers[question.id];
+      const values = Array.isArray(raw) ? raw : [raw];
+      const labels = values.map(value => question.options?.find(option => option.value === value)?.label).filter(Boolean);
+      return `<div class="review-row"><strong>${escapeHtml(question.title)}</strong><span>${escapeHtml(labels.join("、") || "未填答")}</span></div>`;
+    });
+    elements.resultPanel.innerHTML = `<div class="stage-label">調查已完成</div><h2>謝謝，你的回答讓這堂課更貼近大家。</h2><p>這份調查不計分。雲端保存狀態請見左側；班級報表不公開姓名或個別回答。</p><div class="result-list">${rows.join("")}</div><p><a class="button" href="./report.html?survey=${encodeURIComponent(state.questionnaire.id)}">查看班級統計</a></p>`;
+    return;
+  }
   const scoreText = `${result.score}/${result.maxScore}`;
   const outcome = result.proficiency
     ? { title: result.proficiency.label, next: result.proficiency.recommendation }

@@ -17,8 +17,27 @@ function loadContext() {
     }
   });
   vm.runInContext(code, context);
+  vm.runInContext(fs.readFileSync(new URL("../public/analytics-core.js", import.meta.url), "utf8"), context);
   return context;
 }
+
+test("public class analytics return only current release aggregates", () => {
+  const context = loadContext();
+  assert.equal(typeof context.surveyAnalytics_, "function");
+  const survey = JSON.parse(fs.readFileSync(new URL("../data/questionnaires/first-class-profile.json", import.meta.url), "utf8"));
+  const sheets = {
+    QuestionnaireReleases: sheet(["questionnaireId","version","status","questionnaireJson"],[[survey.id,2,"published",JSON.stringify({...survey,lifecycle:{status:"published",version:2}})]]),
+    Results: sheet(["sessionId","questionnaireId","questionnaireVersion","status","displayName"],Array.from({length:6},(_,i)=>[String(i),survey.id,i === 5 ? 1 : 2,"submitted","SECRET"])),
+    Answers: sheet(["sessionId","questionId","answerJson"],Array.from({length:6},(_,i)=>[String(i),"purpose",JSON.stringify(["ai"])]))
+  };
+  const data = context.surveyAnalytics_(spreadsheet(sheets),survey.id,true);
+  assert.equal(data.total,5);
+  assert.equal(data.version,2);
+  assert.equal(data.distributions[0].options.find(o=>o.value === "ai").count,5);
+  assert.ok(!JSON.stringify(data).includes("SECRET"));
+  sheets.QuestionnaireReleases.values[1][2] = "closed";
+  assert.throws(()=>context.surveyAnalytics_(spreadsheet(sheets),survey.id,true),/published/i);
+});
 
 function sheet(headers, rows = []) {
   const values = [headers, ...rows];

@@ -1,0 +1,96 @@
+{
+  "id": "first-class-profile",
+  "title": "大數第一堂課｜認識我們的學習樣貌",
+  "description": "約 3 分鐘，沒有標準答案，也不計分。請填暱稱；老師會用回答調整教學，班級報表僅顯示彙整統計，不公開姓名或個別答案。縣市、年齡可略過。",
+  "mode": "survey",
+  "durationSeconds": 1800,
+  "estimatedMinutes": 3,
+  "accessMode": "open",
+  "accessRoster": [],
+  "lifecycle": { "status": "published", "version": 1, "owner": "course-teacher" },
+  "analytics": {
+    "public": true,
+    "requireCloudPublication": true,
+    "minimumPublicResponses": 5,
+    "crossTabs": [
+      { "row": "age", "column": "pace" },
+      { "row": "ai_experience", "column": "purpose" },
+      { "row": "data_confidence", "column": "pace" }
+    ]
+  },
+  "questions": [
+    {
+      "id": "purpose", "type": "multiple", "title": "來上課的目的", "prompt": "你來大數上課，最希望得到什麼？（可複選）", "required": true, "maxScore": 0,
+      "options": [
+        { "value": "work", "label": "提升工作效率" },
+        { "value": "ai", "label": "學會與 AI 協作" },
+        { "value": "data", "label": "看懂資料、做出決策" },
+        { "value": "career", "label": "轉職或增加職場競爭力" },
+        { "value": "interest", "label": "好奇與自我成長" },
+        { "value": "explore", "label": "還在探索方向" }
+      ]
+    },
+    {
+      "id": "city", "type": "single", "title": "目前所在縣市", "prompt": "你目前主要生活或工作的縣市是？（可略過）", "required": false, "maxScore": 0,
+      "options": [
+        { "value": "taipei", "label": "臺北市" }, { "value": "new-taipei", "label": "新北市" },
+        { "value": "keelung", "label": "基隆市" }, { "value": "taoyuan", "label": "桃園市" },
+        { "value": "hsinchu-city", "label": "新竹市" }, { "value": "hsinchu-county", "label": "新竹縣" },
+        { "value": "miaoli", "label": "苗栗縣" }, { "value": "taichung", "label": "臺中市" },
+        { "value": "changhua", "label": "彰化縣" }, { "value": "nantou", "label": "南投縣" },
+        { "value": "yunlin", "label": "雲林縣" }, { "value": "chiayi-city", "label": "嘉義市" },
+        { "value": "chiayi-county", "label": "嘉義縣" }, { "value": "tainan", "label": "臺南市" },
+        { "value": "kaohsiung", "label": "高雄市" }, { "value": "pingtung", "label": "屏東縣" },
+        { "value": "yilan", "label": "宜蘭縣" }, { "value": "hualien", "label": "花蓮縣" },
+        { "value": "taitung", "label": "臺東縣" }, { "value": "penghu", "label": "澎湖縣" },
+        { "value": "kinmen", "label": "金門縣" }, { "value": "lienchiang", "label": "連江縣" },
+        { "value": "overseas", "label": "海外" }
+      ]
+    },
+    {
+      "id": "age", "type": "single", "title": "年齡級距", "prompt": "你的年齡落在哪個級距？（可略過）", "required": false, "maxScore": 0,
+      "options": [
+        { "value": "under20", "label": "未滿 20 歲" }, { "value": "20s", "label": "20–29 歲" },
+        { "value": "30s", "label": "30–39 歲" }, { "value": "40s", "label": "40–49 歲" },
+        { "value": "50s", "label": "50–59 歲" }, { "value": "60plus", "label": "60 歲以上" }
+      ]
+    },
+    {
+      "id": "pace", "type": "single", "title": "希望的學習節奏", "prompt": "哪種上課節奏最適合你？", "required": true, "maxScore": 0,
+      "options": [
+        { "value": "guided", "label": "一步一步，留時間跟著操作" },
+        { "value": "balanced", "label": "講解與練習各半" },
+        { "value": "challenge", "label": "快速講重點，多做挑戰任務" }
+      ]
+    },
+    {
+      "id": "ai_experience", "type": "single", "title": "AI 使用經驗", "prompt": "你目前使用 ChatGPT 或其他 AI 工具的頻率？", "required": true, "maxScore": 0,
+      "options": [
+        { "value": "never", "label": "還沒有用過" }, { "value": "tried", "label": "試過幾次" },
+        { "value": "weekly", "label": "每週會使用" }, { "value": "daily", "label": "幾乎每天使用" }
+      ]
+    },
+    {
+      "id": "data_confidence", "type": "single", "title": "資料處理熟悉度", "prompt": "目前你對資料處理最接近哪個描述？（自我評估，非測驗）", "required": true, "maxScore": 0,
+      "options": [
+        { "value": "beginner", "label": "剛開始，想從基礎學起" }, { "value": "charts", "label": "能看懂常見圖表" },
+        { "value": "sheets", "label": "會用試算表整理資料" }, { "value": "analysis", "label": "做過統計或程式分析" }
+      ]
+    },
+    {
+      "id": "format", "type": "multiple", "title": "偏好的學習方式", "prompt": "哪些方式最能幫助你學習？（可複選）", "required": true, "maxScore": 0,
+      "options": [
+        { "value": "demo", "label": "老師示範，跟著操作" }, { "value": "cases", "label": "真實工作案例" },
+        { "value": "groups", "label": "小組討論與協作" }, { "value": "practice", "label": "自己練習再提問" },
+        { "value": "replay", "label": "課後講義或影片複習" }
+      ]
+    },
+    {
+      "id": "practice_time", "type": "single", "title": "每週練習時間", "prompt": "除了上課，每週大約能留多少時間練習？", "required": true, "maxScore": 0,
+      "options": [
+        { "value": "under30", "label": "不到 30 分鐘" }, { "value": "30to60", "label": "30–60 分鐘" },
+        { "value": "1to2", "label": "1–2 小時" }, { "value": "over2", "label": "超過 2 小時" }
+      ]
+    }
+  ]
+}

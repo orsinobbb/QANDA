@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>班級統計｜QANDA</title>
+  <link rel="stylesheet" href="./report.css">
+</head>
+<body>
+  <header><a class="brand" href="./">QANDA <span>班級統計</span></a><a id="answerLink" href="./?survey=first-class-profile">填寫問卷 ↗</a></header>
+  <main>
+    <section class="heading"><p class="eyebrow">大數 · 第一堂課</p><h1>我們的學習樣貌</h1><p id="surveyDescription">上課目的、學習偏好與 AI 經驗</p>
+      <div class="toolbar"><label>資料來源 <select id="source"><option value="cloud">班級正式資料</option><option value="demo">教學示範（模擬資料）</option><option value="local">本機已送出</option></select></label><button id="refresh" title="重新讀取資料" aria-label="重新讀取資料">↻</button><button id="export" title="匯出彙整 CSV">匯出 CSV</button><button id="copyAi" title="複製不含個資的 AI 分析提示">複製統計給 AI</button></div>
+      <p id="status" role="status" aria-live="polite">正在讀取班級資料…</p>
+    </section>
+    <section class="kpis" aria-label="統計摘要"><div><span>有效提交份數</span><strong id="total">—</strong></div><div><span>資料版本</span><strong id="version">—</strong></div><div><span>最後讀取</span><strong id="updated">—</strong></div></section>
+    <nav class="tabs" aria-label="報表檢視"><button data-view="distribution" aria-pressed="true">回答分布</button><button data-view="cross" aria-pressed="false">交叉分析</button><button data-view="ai" aria-pressed="false">AI 與教學討論</button></nav>
+    <section id="distribution"><div id="charts" class="charts"></div></section>
+    <section id="cross" hidden><div class="section-title"><h2>交叉分析</h2><select id="crossSelect" aria-label="交叉分析組合"></select></div><p id="crossMeta"></p><div class="table-scroll" id="crossTable"></div><p class="note">每格為人數／列內比例。多選題合計可超過 100%；缺少其中一題的回答不納入配對。小樣本差異不代表因果或能力差異。</p></section>
+    <section id="ai" hidden><h2>資料先說話，AI 再提出假設</h2><div id="observations"></div><div class="ai-roles"><article><span>01 · 程式</span><h3>計數與檢核</h3><p>依有效回答計算人數、比例、未填答與交叉表。</p></article><article><span>02 · AI</span><h3>解讀與提問</h3><p>依據彙整提出教學建議，引用數據，分清觀察與假設。</p></article><article><span>03 · 老師與學員</span><h3>驗證與選擇</h3><p>對照真實經驗，檢查偏誤，決定下一步怎麼上課。</p></article></div><h3>交給 AI 的資料與問題</h3><textarea id="aiPrompt" rows="12" readonly aria-label="AI 分析提示"></textarea><p class="note">此處沒有自動呼叫 AI。複製提示到你的 AI 工具，將回覆與圖表逐項核對；不傳送姓名或個別答案。</p></section>
+    <footer>僅供本班教學。自評與自願填答不代表客觀能力；公開報表至少需 5 份提交。未填答另列，不當作零分。</footer>
+  </main>
+  <script src="./integrations.js"></script><script src="./analytics-core.js"></script><script type="module" src="./report.js"></script>
+</body>
+</html>

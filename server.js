@@ -70,6 +70,8 @@ async function handleApi(req, res, url) {
         title: survey.title,
         description: survey.description || "",
         durationSeconds: survey.durationSeconds,
+        mode: survey.mode,
+        estimatedMinutes: survey.estimatedMinutes,
         questionCount: countQuestions(survey.questions),
         rosterCount: Array.isArray(survey.accessRoster) ? survey.accessRoster.length : 0,
         lifecycle: survey.lifecycle || { status: "published", version: 1 }
@@ -110,7 +112,7 @@ async function handleApi(req, res, url) {
     if (!isSurveyPublished(survey)) throw httpError(409, "此問卷目前未開放作答。");
     const participant = resolveParticipant(survey, body);
     const existing = await findReusableSession(survey.id, participant.personId);
-    if (existing) {
+    if (existing && Number(existing.questionnaireVersion || 1) === Number(survey.lifecycle?.version || 1)) {
       sendJson(res, 200, buildSessionResponse(existing, survey, "resumed"));
       return;
     }
@@ -122,7 +124,7 @@ async function handleApi(req, res, url) {
 
   if (segments[1] === "sessions" && segments[2]) {
     const session = await requireSession(segments[2]);
-    const survey = await requireSurvey(session.questionnaireId);
+    const survey = session.questionnaireSnapshot || await requireSurvey(session.questionnaireId);
 
     if (method === "GET" && segments.length === 3) {
       await expireIfNeeded(session);

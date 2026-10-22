@@ -1,3 +1,4 @@
+// Deploy dist/apps-script/Code.gs, which includes the shared QandaAnalytics code.
 const QANDA_CONFIG = Object.freeze({
   spreadsheetProperty: "QANDA_SPREADSHEET_ID",
   adminTokenHashProperty: "QANDA_ADMIN_TOKEN_SHA256",
@@ -75,6 +76,9 @@ function doGet(e) {
     }
     if (action === "public.questionnaire") {
       return json_({ ok: true, data: publicQuestionnaire_(getSpreadsheet_(), String(e.parameter.id || "")) });
+    }
+    if (action === "public.analytics") {
+      return json_({ ok: true, data: surveyAnalytics_(getSpreadsheet_(), String(e.parameter.id || ""), true) });
     }
     return json_({ ok: true, service: "QANDA Google Sheets receiver", at: new Date().toISOString() });
   } catch (error) {
@@ -160,6 +164,8 @@ function handleAdminRequest_(payload, receivedAt) {
     result = closeQuestionnaire_(spreadsheet, payload.questionnaireId, payload.actor || "questionnaire-admin");
   } else if (payload.event === "admin.dashboard") {
     result = dashboard_(spreadsheet, payload.filters || {});
+  } else if (payload.event === "admin.survey.analytics") {
+    result = surveyAnalytics_(spreadsheet, String(payload.questionnaireId || ""), false);
   } else {
     throw new Error("Unsupported admin event");
   }
@@ -263,6 +269,24 @@ function latestReleases_(spreadsheet) {
     if (!latest[id] || Number(row.version) > Number(latest[id].version)) latest[id] = row;
   });
   return Object.keys(latest).map(function (id) { return latest[id]; });
+}
+
+function surveyAnalytics_(spreadsheet, questionnaireId, publicMode) {
+  if (!isSafeId_(questionnaireId)) throw new Error("Invalid questionnaire id");
+  const release = latestReleases_(spreadsheet).find(function(row) { return String(row.questionnaireId) === questionnaireId; });
+  if (!release || (publicMode && String(release.status) !== "published")) throw new Error("Published survey not found");
+  const survey = parseJson_(release.questionnaireJson, null);
+  if (!survey || survey.mode !== "survey" || (publicMode && survey.analytics?.public !== true)) throw new Error("Public analytics not enabled");
+  const responses = sheetObjects_(spreadsheet.getSheetByName("Results")).filter(function(row) {
+    return String(row.questionnaireId) === questionnaireId && Number(row.questionnaireVersion || 1) === Number(release.version) && String(row.status) === "submitted";
+  }).map(function(row) { return {sessionId:String(row.sessionId),status:"submitted",answers:{}}; });
+  const bySession = new Map(responses.map(function(row) { return [row.sessionId,row]; }));
+  const questionIds = new Set(survey.questions.map(function(q) { return q.id; }));
+  sheetObjects_(spreadsheet.getSheetByName("Answers")).forEach(function(row) {
+    const response = bySession.get(String(row.sessionId));
+    if (response && questionIds.has(String(row.questionId))) response.answers[String(row.questionId)] = parseJson_(row.answerJson, null);
+  });
+  return QandaAnalytics.aggregate(survey, responses, {public:publicMode});
 }
 
 function publishQuestionnaire_(spreadsheet, questionnaire, actor) {

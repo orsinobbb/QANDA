@@ -51,6 +51,8 @@
           title: survey.title,
           description: survey.description || "",
           durationSeconds: survey.durationSeconds,
+          mode: survey.mode,
+          estimatedMinutes: survey.estimatedMinutes,
           questionCount: countQuestions(survey.questions),
           rosterCount: Array.isArray(survey.accessRoster) ? survey.accessRoster.length : 0,
           lifecycle: survey.lifecycle || { status: "published", version: 1 },
@@ -89,10 +91,22 @@
     if (method === "POST" && apiPath === "/api/sessions/start") {
       const survey = await requireSurvey(body.questionnaireId, false);
       if (!isSurveyPublished(survey)) throw httpError(409, "此問卷目前未開放作答。");
+      if (survey.analytics?.requireCloudPublication) {
+        const endpoint = window.QANDA_CONFIG?.googleAppsScriptUrl;
+        if (!endpoint) throw httpError(409, "老師尚未設定雲端收件，請先不要作答。");
+        const checkUrl = new URL(endpoint);
+        checkUrl.searchParams.set("action", "public.analytics");
+        checkUrl.searchParams.set("id", survey.id);
+        const check = await realFetch(checkUrl.toString(), {signal:AbortSignal.timeout(15000)}).then(response => response.json());
+        if (!check.ok || !Array.isArray(check.data?.distributions) || Number(check.data.version) !== Number(survey.lifecycle?.version || 1)) {
+          throw httpError(409, "老師尚未完成這份問卷的雲端發布與報表更新，請稍後再填。");
+        }
+      }
       const participant = resolveParticipant(survey, body);
       const existing = getSessions().find(
         (session) =>
           session.questionnaireId === survey.id &&
+          Number(session.questionnaireVersion || 1) === Number(survey.lifecycle?.version || 1) &&
           session.participant.personId === participant.personId &&
           session.status === "in_progress" &&
           !isExpired(session)
@@ -105,7 +119,7 @@
 
     if (segments[1] === "sessions" && segments[2]) {
       const session = requireSession(segments[2]);
-      const survey = await requireSurvey(session.questionnaireId);
+      const survey = session.questionnaireSnapshot || await requireSurvey(session.questionnaireId);
 
       if (method === "GET" && segments.length === 3) {
         expireIfNeeded(session);
@@ -126,7 +140,7 @@
         session.result = gradeAnswers(survey, session.answers, assessments);
         session.status = "submitted";
         session.submittedAt = new Date().toISOString();
-        session.aiLogs.push({
+        if (survey.mode !== "survey") session.aiLogs.push({
           at: new Date().toISOString(),
           provider: "static-fallback",
           model: "length-rubric",
@@ -143,7 +157,7 @@
 
     if (segments[1] === "results" && segments[2] && method === "GET") {
       const session = requireSession(segments[2]);
-      const survey = await requireSurvey(session.questionnaireId);
+      const survey = session.questionnaireSnapshot || await requireSurvey(session.questionnaireId);
       return {
         summary: buildResultSummary(session, survey),
         session,
@@ -337,6 +351,8 @@
     return {
       id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       questionnaireId: survey.id,
+      questionnaireVersion: Number(survey.lifecycle?.version || 1),
+      ...(survey.mode === "survey" ? {questionnaireSnapshot: structuredClone(survey)} : {}),
       participant: {
         personId: participant.personId,
         displayName: participant.displayName || participant.personId,
@@ -435,6 +451,11 @@
   }
 
   function gradeAnswers(survey, answers, aiAssessments = {}) {
+    if (survey.mode === "survey") return {
+      mode: "survey", score:0, maxScore:0, percentage:null, proficiency:null, competencies:[], gradedAt:new Date().toISOString(),
+      questionResults:survey.questions.map(question => ({id:question.id,title:question.title || question.prompt,type:question.type,
+        score:0,maxScore:0,status:(Array.isArray(answers[question.id]) ? answers[question.id].length > 0 : answers[question.id] != null && answers[question.id] !== "") ? "recorded" : "skipped",comment:"",answer:answers[question.id] ?? null}))
+    };
     const questionResults = [];
     let score = 0;
     let maxScore = 0;

@@ -12,6 +12,7 @@ await copyDir(publicDir, dist);
 await copyDir(dataDir, path.join(dist, "data", "questionnaires"));
 await writeQuestionnaireIndex();
 await patchIndex();
+await import("./build_apps_script.mjs");
 
 console.log(`Built GitHub Pages artifact at ${dist}`);
 

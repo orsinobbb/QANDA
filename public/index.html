@@ -19,6 +19,7 @@
           <strong id="roleContextLabel">學員</strong>
         </div>
         <a id="leaveAdminLink" class="leave-admin-link hidden" href="./">離開管理</a>
+        <a id="classReportLink" href="./report.html?survey=first-class-profile">班級統計</a>
       </div>
     </header>
 
@@ -41,7 +42,7 @@
               </div>
               <div>
                 <span>作答方式</span>
-                <strong>限時作答</strong>
+                <strong id="previewAnswerMode">限時作答</strong>
               </div>
             </div>
           </section>
@@ -49,7 +50,7 @@
           <div class="experience-promises">
             <div>
               <strong>答案會自動保存</strong>
-              <span>輸入後先保存在本機，再同步至後端。</span>
+              <span>作答先保存在此裝置；提交後請確認雲端保存狀態。</span>
             </div>
             <div>
               <strong>按下開始才開始計時</strong>
@@ -75,7 +76,7 @@
             </label>
             <p id="directLinkHint" class="direct-link-hint hidden">此作答連結已指定卷別。</p>
             <label>
-              姓名
+              <span id="participantNameLabel">姓名</span>
               <input id="displayNameInput" autocomplete="name" placeholder="請輸入姓名" />
             </label>
             <input id="groupInput" type="hidden" value="" />

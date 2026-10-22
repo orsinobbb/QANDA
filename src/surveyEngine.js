@@ -178,6 +178,8 @@ export function createSession({ survey, participant }) {
   return {
     id: makeSessionId(),
     questionnaireId: survey.id,
+    questionnaireVersion: Number(survey.lifecycle?.version || 1),
+    ...(survey.mode === "survey" ? {questionnaireSnapshot: structuredClone(survey)} : {}),
     participant: {
       personId: participant.personId,
       displayName: participant.displayName || participant.personId,
@@ -224,6 +226,11 @@ export function mergeAnswers(session, incoming, meta = {}) {
 }
 
 export function gradeAnswers(survey, answers, aiAssessments = {}) {
+  if (survey.mode === "survey") return {
+    mode: "survey", score: 0, maxScore: 0, percentage: null, proficiency: null, competencies: [], gradedAt: nowIso(),
+    questionResults: survey.questions.map(question => ({id:question.id, title:question.title || question.prompt, type:question.type,
+      score:0, maxScore:0, status:(Array.isArray(answers[question.id]) ? answers[question.id].length > 0 : answers[question.id] != null && answers[question.id] !== "") ? "recorded" : "skipped", comment:"", answer:answers[question.id] ?? null}))
+  };
   const questionResults = [];
   let score = 0;
   let maxScore = 0;
